@@ -174,10 +174,10 @@ app.get('/api/wal', (c) => {
 
 app.post('/api/restore', async (c) => {
   const { timestamp, lsn } = await c.req.json();
-  let target = timestamp;
+  let target = lsn || timestamp;
 
   if (!target) {
-    return c.json({ error: "No target timestamp provided" }, 400);
+    return c.json({ error: "No target LSN or timestamp provided" }, 400);
   }
 
   console.log(`Triggering Point-in-Time Restore to: ${target}`);
