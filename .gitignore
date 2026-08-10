@@ -3,6 +3,11 @@ backups/base/*
 !backups/base/.gitkeep
 backups/wal/*
 !backups/wal/.gitkeep
+backups/archive/*
+!backups/archive/.gitkeep
+backups/backup/*
+!backups/backup/.gitkeep
+
 
 # Ignore runtime logs and lock files
 *.log
