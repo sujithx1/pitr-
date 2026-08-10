@@ -27,7 +27,7 @@ function getOidMap(forceRefresh = false): Record<string, string> {
   
   const map: Record<string, string> = {};
   const sql = "SELECT oid, relname FROM pg_class WHERE relkind = 'r';";
-  const output = runCmd(`docker exec -t postgres_pitr_lab psql -U sujith -d db -t -A -c "${sql}"`);
+  const output = runCmd(`docker exec -i postgres_pitr_lab psql -U sujith -d db -t -A -P pager=off -c "${sql}"`);
   
   if (output) {
     output.split('\n').forEach(line => {
@@ -51,7 +51,7 @@ app.get('/api/status', (c) => {
   const pgStatus = runCmd("docker inspect -f '{{.State.Status}}' postgres_pitr_lab");
   let dbConnection = "OFFLINE";
   if (pgStatus === "running") {
-    const check = runCmd("docker exec -t postgres_pitr_lab pg_isready -U sujith -d db");
+    const check = runCmd("docker exec -i postgres_pitr_lab pg_isready -U sujith -d db");
     if (check.includes("accepting connections")) {
       dbConnection = "ONLINE";
     } else {
@@ -66,11 +66,13 @@ app.get('/api/status', (c) => {
 
 app.get('/api/wal', (c) => {
   try {
+    console.log("wal log api called")
     // 1. Get current active WAL file name
     const currentWalFile = runCmd(
-      `docker exec -t postgres_pitr_lab psql -U sujith -d db -t -A -c "SELECT pg_walfile_name(pg_current_wal_lsn());"`
+      `docker exec -i postgres_pitr_lab psql -U sujith -d db -t -A -P pager=off -c "SELECT pg_walfile_name(pg_current_wal_lsn());"`
     );
 
+    console.log(`currentWalFile : ${currentWalFile}`)
     if (!currentWalFile) {
       return c.json({ error: "Could not fetch active WAL file" }, 500);
     }
@@ -78,11 +80,13 @@ app.get('/api/wal', (c) => {
     // 2. Fetch OID table map (from cache)
     const oidMap = getOidMap();
 
+    console.log(`oidMap : ${JSON.stringify(oidMap)}`)
     // 3. Run pg_waldump on the current file
     const dumpOutput = runCmd(
-      `docker exec -t postgres_pitr_lab pg_waldump /var/lib/postgresql/18/docker/pg_wal/${currentWalFile}`
+      `docker exec -i postgres_pitr_lab pg_waldump /var/lib/postgresql/18/docker/pg_wal/${currentWalFile}`
     );
 
+    console.log(`dumpOutput : ${dumpOutput}`)
     if (!dumpOutput) {
       return c.json({ events: [] });
     }
