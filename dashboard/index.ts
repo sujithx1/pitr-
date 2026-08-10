@@ -19,14 +19,15 @@ function runCmd(cmd: string): string {
 
 let oidCache: Record<string, string> = {};
 
-// Fetch OID to Table name map from Postgres
+// Fetch OID to Table name map from Postgres (ONLY for user-created tables in the 'public' schema)
 function getOidMap(forceRefresh = false): Record<string, string> {
   if (Object.keys(oidCache).length > 0 && !forceRefresh) {
     return oidCache;
   }
   
   const map: Record<string, string> = {};
-  const sql = "SELECT oid, relname FROM pg_class WHERE relkind = 'r';";
+  // Filter by 'public' namespace OID so we don't fetch system tables (like pg_class, pg_depend, etc.)
+  const sql = "SELECT c.oid, c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE c.relkind = 'r' AND n.nspname = 'public';";
   const output = runCmd(`docker exec -i postgres_pitr_lab psql -U sujith -d db -t -A -P pager=off -c "${sql}"`);
   
   if (output) {
@@ -80,7 +81,7 @@ app.get('/api/wal', (c) => {
     // 2. Fetch OID table map (from cache)
     const oidMap = getOidMap();
 
-    console.log(`oidMap : ${JSON.stringify(oidMap)}`)
+    // console.log(`oidMap : ${JSON.stringify(oidMap)}`)
     // 3. Run pg_waldump on the current file (appended || true because hitting the end of active WAL file is normal and returns exit code 1)
     const dumpOutput = runCmd(
       `docker exec -i postgres_pitr_lab pg_waldump /var/lib/postgresql/18/docker/pg_wal/${currentWalFile} || true`
@@ -111,13 +112,18 @@ app.get('/api/wal', (c) => {
       const rmgr = rmgrMatch ? rmgrMatch[1] : '';
       const tableOid = relMatch ? relMatch[1] : '';
 
+      // Skip system catalog modifications (Postgres system tables always have OIDs < 16384)
+      if (tableOid && parseInt(tableOid) < 16384) {
+        continue;
+      }
+
       // Resolve table name (lazy load if unknown OID is found)
       let tableName = tableOid;
       if (tableOid) {
         if (!oidMap[tableOid]) {
           Object.assign(oidMap, getOidMap(true));
         }
-        tableName = oidMap[tableOid] || tableOid;
+        tableName = oidMap[tableOid] || `Relation ${tableOid}`;
       }
 
       // Filter for interesting client operations
