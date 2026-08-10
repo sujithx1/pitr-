@@ -184,9 +184,9 @@ app.post('/api/restore', async (c) => {
 
   // Run the restore script asynchronously as we need to restart the container which runs this API!
   // Since the API stops the database container, it will work fine because the API container is running on the host!
+  // Run restore.sh script
   try {
-    // Run restore.sh script
-    const output = runCmd(`./scripts/restore.sh "${target}"`);
+    const output = runCmd(`../scripts/restore.sh "${target}"`);
     return c.json({ success: true, log: output });
   } catch (err: any) {
     return c.json({ success: false, error: err.message }, 500);
