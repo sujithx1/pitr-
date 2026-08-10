@@ -17,8 +17,14 @@ function runCmd(cmd: string): string {
   }
 }
 
+let oidCache: Record<string, string> = {};
+
 // Fetch OID to Table name map from Postgres
-function getOidMap(): Record<string, string> {
+function getOidMap(forceRefresh = false): Record<string, string> {
+  if (Object.keys(oidCache).length > 0 && !forceRefresh) {
+    return oidCache;
+  }
+  
   const map: Record<string, string> = {};
   const sql = "SELECT oid, relname FROM pg_class WHERE relkind = 'r';";
   const output = runCmd(`docker exec -t postgres_pitr_lab psql -U sujith -d db -t -A -c "${sql}"`);
@@ -28,8 +34,9 @@ function getOidMap(): Record<string, string> {
       const [oid, name] = line.split('|');
       if (oid && name) map[oid.trim()] = name.trim();
     });
+    oidCache = map;
   }
-  return map;
+  return oidCache;
 }
 
 // Get the timestamp of a transaction if available (from commit record) or estimate it
@@ -68,7 +75,7 @@ app.get('/api/wal', (c) => {
       return c.json({ error: "Could not fetch active WAL file" }, 500);
     }
 
-    // 2. Fetch OID table map
+    // 2. Fetch OID table map (from cache)
     const oidMap = getOidMap();
 
     // 3. Run pg_waldump on the current file
@@ -100,10 +107,13 @@ app.get('/api/wal', (c) => {
       const rmgr = rmgrMatch ? rmgrMatch[1] : '';
       const tableOid = relMatch ? relMatch[1] : '';
 
-      // Resolve table name
+      // Resolve table name (lazy load if unknown OID is found)
       let tableName = tableOid;
-      if (oidMap[tableOid]) {
-        tableName = oidMap[tableOid];
+      if (tableOid) {
+        if (!oidMap[tableOid]) {
+          Object.assign(oidMap, getOidMap(true));
+        }
+        tableName = oidMap[tableOid] || tableOid;
       }
 
       // Filter for interesting client operations
@@ -174,7 +184,7 @@ app.post('/api/restore', async (c) => {
 });
 
 export default {
-  port: 3000,
+  port: 3001,
   fetch: app.fetch,
 };
 console.log("Dashboard server started at http://localhost:3000");
