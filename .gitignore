@@ -1,0 +1,13 @@
+# Ignore database backups
+backups/base/*
+!backups/base/.gitkeep
+backups/wal/*
+!backups/wal/.gitkeep
+
+# Ignore runtime logs and lock files
+*.log
+*.pid
+
+# OS generated files
+.DS_Store
+Thumbs.db

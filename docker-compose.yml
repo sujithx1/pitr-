@@ -1,0 +1,20 @@
+services:
+  postgres_pitr:
+    image: postgres:18-alpine
+    container_name: postgres_pitr_lab
+    environment:
+      POSTGRES_DB: db
+      POSTGRES_USER: sujith
+      POSTGRES_PASSWORD: sujith
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./postgres/postgresql.conf:/etc/postgresql/postgresql.conf
+      - ./postgres/pg_hba.conf:/etc/postgresql/pg_hba.conf
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./backups:/backups
+      - pgdata:/var/lib/postgresql
+    command: ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf", "-c", "hba_file=/etc/postgresql/pg_hba.conf"]
+
+volumes:
+  pgdata:
