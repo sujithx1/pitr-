@@ -286,19 +286,33 @@
 
     <!-- Confirmation Modal -->
     <div id="restore-modal" class="modal">
-        <div class="modal-content">
+        <div class="modal-content" style="width: 450px;">
             <h3 style="margin-bottom: 0.5rem;">Confirm Restore?</h3>
-            <p style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 1rem;">
-                This will shut down the database, perform a delta restore, and roll back to the state at:
-            </p>
             <p id="target-time-display" style="font-family: monospace; font-weight: bold; font-size: 1.1rem; color: var(--warning); margin-bottom: 1rem;"></p>
+            
+            <div style="text-align: left; margin: 1rem 0; border-top: 1px solid var(--border-color); padding-top: 1rem;">
+                <label style="display: block; font-size: 0.9rem; margin-bottom: 0.5rem; cursor: pointer;">
+                    <input type="radio" name="restore-mode" id="restore-mode-inplace" value="inplace" checked onchange="toggleRestoreFields()">
+                    <strong>In-Place Restore</strong> (Stop & overwrite database)
+                </label>
+                <label style="display: block; font-size: 0.9rem; cursor: pointer;">
+                    <input type="radio" name="restore-mode" id="restore-mode-fork" value="fork" onchange="toggleRestoreFields()">
+                    <strong>Out-of-Place Fork</strong> (Zero Downtime, stream pg_dump)
+                </label>
+            </div>
+
+            <div id="fork-fields" style="display: none; text-align: left; margin-bottom: 1rem;">
+                <label style="font-size: 0.8rem; color: var(--text-secondary); display: block; margin-bottom: 0.25rem;">Target Database Connection URL:</label>
+                <input type="text" id="target-db-url" placeholder="postgresql://sujith:sujith@localhost:5432/db" style="width: 100%; padding: 0.5rem; border-radius: 6px; border: 1px solid var(--border-color); background: rgba(0,0,0,0.2); color: #fff; font-family: monospace; font-size: 0.8rem;">
+            </div>
+
             <div id="modal-actions" class="modal-buttons">
                 <button class="btn-cancel" onclick="closeModal()">Cancel</button>
                 <button class="btn-confirm" id="btn-confirm-action">Confirm Restore</button>
             </div>
             <div id="modal-loading" style="display: none;">
                 <div class="loading-spinner"></div>
-                <p style="font-size: 0.8rem; color: var(--text-secondary);">Restoring... Database container will restart.</p>
+                <p id="modal-loading-text" style="font-size: 0.8rem; color: var(--text-secondary);">Restoring... Database container will restart.</p>
             </div>
         </div>
     </div>
@@ -367,8 +381,8 @@
                             <div class="event-detail">${event.detail}</div>
                         </div>
                         <div>
-                            <button class="restore-btn" onclick="openRestoreModal('${timeStr}')">
-                                Restore to Point
+                            <button class="restore-btn" onclick="openRestoreModal('${event.lsn}')">
+                                Restore to LSN
                             </button>
                         </div>
                     `;
@@ -379,9 +393,14 @@
             }
         }
 
-        function openRestoreModal(timestamp) {
-            selectedTimestamp = timestamp;
-            document.getElementById('target-time-display').innerText = timestamp;
+        function toggleRestoreFields() {
+            const isFork = document.getElementById('restore-mode-fork').checked;
+            document.getElementById('fork-fields').style.display = isFork ? 'block' : 'none';
+        }
+
+        function openRestoreModal(lsn) {
+            selectedTimestamp = lsn;
+            document.getElementById('target-time-display').innerText = `LSN: ${lsn}`;
             document.getElementById('restore-modal').style.display = 'flex';
             
             // Set up click handler
@@ -392,22 +411,39 @@
             document.getElementById('restore-modal').style.display = 'none';
             document.getElementById('modal-actions').style.display = 'flex';
             document.getElementById('modal-loading').style.display = 'none';
+            document.getElementById('restore-mode-inplace').checked = true;
+            document.getElementById('fork-fields').style.display = 'none';
+            document.getElementById('target-db-url').value = '';
         }
 
         async function triggerRestore() {
+            const isFork = document.getElementById('restore-mode-fork').checked;
+            const targetDbUrl = isFork ? document.getElementById('target-db-url').value.trim() : null;
+
+            if (isFork && !targetDbUrl) {
+                alert('Please enter a target database connection URL.');
+                return;
+            }
+
             document.getElementById('modal-actions').style.display = 'none';
             document.getElementById('modal-loading').style.display = 'block';
+            document.getElementById('modal-loading-text').innerText = isFork 
+                ? 'Restoring via fork clone... This will take a moment.' 
+                : 'Restoring in-place... Database container will restart.';
 
             try {
                 const res = await fetch('/api/restore', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ timestamp: selectedTimestamp })
+                    body: JSON.stringify({ 
+                        lsn: selectedTimestamp,
+                        targetDbUrl: targetDbUrl
+                    })
                 });
                 const data = await res.json();
                 
                 if (data.success) {
-                    alert('Restore initiated successfully! The database is recovering.');
+                    alert('Restore completed successfully!');
                 } else {
                     alert('Restore failed: ' + data.error);
                 }
@@ -415,7 +451,7 @@
                 alert('Connection error during restore.');
             } finally {
                 closeModal();
-                setTimeout(fetchData, 6000); // refresh after 6 seconds to let PG boot up
+                setTimeout(fetchData, isFork ? 2000 : 6000); // refresh after 6 seconds if in-place
             }
         }
 

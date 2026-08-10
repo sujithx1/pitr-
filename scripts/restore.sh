@@ -4,8 +4,13 @@ set -e
 CONTAINER_NAME="postgres_pitr_lab"
 STANZA_NAME="db"
 
-# Prompt for the recovery target timestamp
-read -p "Enter recovery target timestamp (e.g., 2026-08-10 11:42:00): " TARGET_TIME
+# Check if target timestamp is passed as an argument
+TARGET_TIME=$1
+
+if [ -z "$TARGET_TIME" ]; then
+    # Prompt for the recovery target timestamp if not provided as argument
+    read -p "Enter recovery target timestamp (e.g., 2026-08-10 11:42:00): " TARGET_TIME
+fi
 
 if [ -z "$TARGET_TIME" ]; then
     echo "ERROR: Target time is required."
@@ -17,24 +22,35 @@ echo "Starting pgBackRest Recovery Pipeline"
 echo "Target Time: $TARGET_TIME"
 echo "=========================================="
 
-# 1. Stop PostgreSQL server inside the container
-echo "[1/4] Stopping PostgreSQL database server..."
-docker exec -u postgres -i "$CONTAINER_NAME" pg_ctl -D /var/lib/postgresql/18/docker stop || true
+# Change directory to project root (one level up from scripts/)
+cd "$(dirname "$0")/.."
 
-# 2. Run pgBackRest delta restore to target timestamp
-echo "[2/4] Executing pgBackRest delta restore..."
-docker exec -u postgres -i "$CONTAINER_NAME" pgbackrest \
-    --stanza="$STANZA_NAME" \
-    --delta \
-    --type=time \
-    --target="$TARGET_TIME" \
-    --target-action=promote \
-    restore
+# Auto-detect if target is an LSN (e.g. 0/C000120) or a timestamp
+if [[ "$TARGET_TIME" =~ ^[0-9A-Fa-f]+/[0-9A-Fa-f]+$ ]]; then
+    TYPE_FLAG="--type=lsn"
+    echo " -> Detected LSN recovery target."
+else
+    TYPE_FLAG="--type=time"
+    echo " -> Detected timestamp recovery target."
+fi
 
-# 3. Start PostgreSQL server back up
-echo "[3/4] Starting PostgreSQL database server..."
-# We restart the container to let docker-entrypoint run it or launch pg_ctl
-docker restart "$CONTAINER_NAME"
+# 1. Stop PostgreSQL container
+echo "[1/4] Stopping PostgreSQL database container..."
+docker compose stop
+
+# 2. Run pgBackRest delta restore using a temporary helper container mounting the same volumes
+echo "[2/4] Executing pgBackRest delta restore in helper container..."
+docker run --rm \
+    --user postgres \
+    -v pitr_pgdata:/var/lib/postgresql \
+    -v "$(pwd)/backups:/backups" \
+    -v "$(pwd)/postgres/pgbackrest.conf:/etc/pgbackrest/pgbackrest.conf" \
+    pitr-postgres_pitr:latest \
+    pgbackrest --stanza="$STANZA_NAME" --delta $TYPE_FLAG --target="$TARGET_TIME" --target-action=promote restore
+
+# 3. Start PostgreSQL container back up
+echo "[3/4] Starting PostgreSQL database container..."
+docker compose start
 
 # 4. Wait for database to start and print confirmation
 echo "[4/4] Waiting for database to recover and accept connections..."
@@ -44,5 +60,6 @@ echo "------------------------------------------"
 echo "Verifying restored table status:"
 docker exec -t "$CONTAINER_NAME" psql -U sujith -d db -c "SELECT * FROM users;" || echo " -> Recovery in progress or table not recovered."
 echo "------------------------------------------"
+
 
 echo "Recovery Pipeline Finished!"

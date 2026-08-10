@@ -173,23 +173,29 @@ app.get('/api/wal', (c) => {
 });
 
 app.post('/api/restore', async (c) => {
-  const { timestamp, lsn } = await c.req.json();
+  const { timestamp, lsn, targetDbUrl } = await c.req.json();
   let target = lsn || timestamp;
 
   if (!target) {
     return c.json({ error: "No target LSN or timestamp provided" }, 400);
   }
 
-  console.log(`Triggering Point-in-Time Restore to: ${target}`);
-
-  // Run the restore script asynchronously as we need to restart the container which runs this API!
-  // Since the API stops the database container, it will work fine because the API container is running on the host!
-  // Run restore.sh script
-  try {
-    const output = runCmd(`../scripts/restore.sh "${target}"`);
-    return c.json({ success: true, log: output });
-  } catch (err: any) {
-    return c.json({ success: false, error: err.message }, 500);
+  if (targetDbUrl) {
+    console.log(`Triggering Out-of-Place Restore to LSN/Time: ${target} -> Target DB: ${targetDbUrl}`);
+    try {
+      const output = runCmd(`../scripts/restore_fork.sh "${target}" "${targetDbUrl}"`);
+      return c.json({ success: true, log: output });
+    } catch (err: any) {
+      return c.json({ success: false, error: err.message }, 500);
+    }
+  } else {
+    console.log(`Triggering In-Place Restore to: ${target}`);
+    try {
+      const output = runCmd(`../scripts/restore.sh "${target}"`);
+      return c.json({ success: true, log: output });
+    } catch (err: any) {
+      return c.json({ success: false, error: err.message }, 500);
+    }
   }
 });
 
