@@ -81,9 +81,9 @@ app.get('/api/wal', (c) => {
     const oidMap = getOidMap();
 
     console.log(`oidMap : ${JSON.stringify(oidMap)}`)
-    // 3. Run pg_waldump on the current file
+    // 3. Run pg_waldump on the current file (appended || true because hitting the end of active WAL file is normal and returns exit code 1)
     const dumpOutput = runCmd(
-      `docker exec -i postgres_pitr_lab pg_waldump /var/lib/postgresql/18/docker/pg_wal/${currentWalFile}`
+      `docker exec -i postgres_pitr_lab pg_waldump /var/lib/postgresql/18/docker/pg_wal/${currentWalFile} || true`
     );
 
     console.log(`dumpOutput : ${dumpOutput}`)
@@ -191,4 +191,3 @@ export default {
   port: 3001,
   fetch: app.fetch,
 };
-console.log("Dashboard server started at http://localhost:3000");
