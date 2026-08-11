@@ -106,11 +106,11 @@ app.get('/api/wal', (c) => {
       const descMatch = line.match(/desc:\s+([^,]+)/);
       const relMatch = line.match(/rel\s+\d+\/\d+\/(\d+)/);
 
-      const lsn = lsnMatch ? lsnMatch[1] : '';
-      const tx = txMatch ? txMatch[1] : '0';
-      const desc = descMatch ? descMatch[1] : '';
-      const rmgr = rmgrMatch ? rmgrMatch[1] : '';
-      const tableOid = relMatch ? relMatch[1] : '';
+      const lsn = (lsnMatch && lsnMatch[1]) ? lsnMatch[1] : '';
+      const tx = (txMatch && txMatch[1]) ? txMatch[1] : '0';
+      const desc = (descMatch && descMatch[1]) ? descMatch[1] : '';
+      const rmgr = (rmgrMatch && rmgrMatch[1]) ? rmgrMatch[1] : '';
+      const tableOid = (relMatch && relMatch[1]) ? relMatch[1] : '';
 
       // Skip system catalog modifications (Postgres system tables always have OIDs < 16384)
       if (tableOid && parseInt(tableOid) < 16384) {
@@ -146,7 +146,7 @@ app.get('/api/wal', (c) => {
           
           // Check if this commit dropped tables/sequences
           const relsMatch = desc.match(/rels:\s+([^;]+)/);
-          if (relsMatch) {
+          if (relsMatch && relsMatch[1]) {
             const droppedOids = relsMatch[1].trim().split(/\s+/).map(r => {
               const parts = r.split('/');
               return parts[parts.length - 1];
