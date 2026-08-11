@@ -143,6 +143,25 @@ app.get('/api/wal', (c) => {
         } else if (desc.startsWith('COMMIT')) {
           opType = 'COMMIT';
           detail = `Transaction ${tx} committed`;
+          
+          // Check if this commit dropped tables/sequences
+          const relsMatch = desc.match(/rels:\s+([^;]+)/);
+          if (relsMatch) {
+            const droppedOids = relsMatch[1].trim().split(/\s+/).map(r => {
+              const parts = r.split('/');
+              return parts[parts.length - 1];
+            });
+            
+            // Check if any of the dropped OIDs are user tables (OID >= 16384)
+            const droppedTableNames = droppedOids
+              .filter(oid => parseInt(oid) >= 16384)
+              .map(oid => oidMap[oid] || `Relation ${oid}`);
+            
+            if (droppedTableNames.length > 0) {
+              opType = 'DROP';
+              detail = `Dropped table/sequence: ${droppedTableNames.join(', ')}`;
+            }
+          }
         } else if (desc.startsWith('ABORT')) {
           opType = 'ROLLBACK';
           detail = `Transaction ${tx} rolled back`;
