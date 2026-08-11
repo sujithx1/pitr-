@@ -4,63 +4,70 @@ Welcome to the hands-on PostgreSQL PITR Masterclass! This project is an interact
 
 ---
 
-## 📚 Course Modules & What We Built
+## 📁 Repository Directory Structure
 
-### Module 1: PostgreSQL Storage Internals
-*   **Concepts Learned:** PGDATA layout, Heap files, Pages, Tuples, MVCC (Multi-Version Concurrency Control), and `xmin`/`xmax` tracking.
-*   **Why we need this:** To understand how data physically sits on disk. When you run an `UPDATE` or `DELETE`, PostgreSQL does not overwrite the data in place; it writes a new version of the row (tuple) and flags the old one as dead. We used the `pageinspect` extension to view the physical bytes of the data page and see these pointers directly.
+Here is a detailed breakdown of every folder in this project and its purpose:
 
-### Module 2: WAL (Write-Ahead Logging) & Durability
-*   **Concepts Learned:** WAL files, redo logs, physiological logging, and LSNs (Log Sequence Numbers).
-*   **Why we need this:** Writing to disk is slow. To ensure durability without sacrificing speed, PostgreSQL writes all changes sequentially to the Write-Ahead Log (WAL) first. If the server crashes, PostgreSQL reads the WAL logs on startup to replay and rebuild the exact memory state.
+### 1. [`postgres/`](file:///home/mdspl-sujith/sujith/pitr/postgres)
+Contains the database runtime files, custom Docker building configurations, and configuration files.
+*   [`Dockerfile`](file:///home/mdspl-sujith/sujith/pitr/postgres/Dockerfile): Pre-installs the `pgbackrest` utility inside the PostgreSQL 18 container so that the database engine can directly run archiving tasks.
+*   [`init.sql`](file:///home/mdspl-sujith/sujith/pitr/postgres/init.sql): Initializes the lab database on the first container run (enabling `pageinspect` extension and creating the sample `users` table).
+*   [`postgresql.conf`](file:///home/mdspl-sujith/sujith/pitr/postgres/postgresql.conf): Controls core PostgreSQL database engine settings.
+*   [`pgbackrest.conf`](file:///home/mdspl-sujith/sujith/pitr/postgres/pgbackrest.conf): Configures pgBackRest directories, backup retention limits, and compression settings.
+*   [`pg_hba.conf`](file:///home/mdspl-sujith/sujith/pitr/postgres/pg_hba.conf): Configures host-based database connection authentication permissions.
 
-### Module 3: Enterprise WAL Archiving (pgBackRest)
-*   **Concepts Learned:** Stanzas, Full/Incremental backups, `archive-push`, and `archive-get`.
-*   **Why we use pgBackRest:** Manual shell script copies of data directories are fragile, uncompressed, and prone to corruption. We integrated `pgBackRest` (an industry standard) because:
-    *   It compresses archived WAL files to save disk space.
-    *   It supports **delta restores** (validating data block checksums and only copying changed files, making restores extremely fast).
-    *   It manages retention policies and verifies backup integrity automatically.
+### 2. [`dashboard/`](file:///home/mdspl-sujith/sujith/pitr/dashboard)
+The real-time log analyzer web application.
+*   [`index.ts`](file:///home/mdspl-sujith/sujith/pitr/dashboard/index.ts): A Bun + Hono API server. It executes `pg_waldump` against the database container, parses OIDs using cache memory to speed up performance, and exposes endpoints for database status checks and recovery execution.
+*   [`public/index.html`](file:///home/mdspl-sujith/sujith/pitr/dashboard/public/index.html): HTML5/CSS3 dark glassmorphic dashboard interface. Displays the transaction stream and contains the interactive recovery confirmation modals with modern toast notifications.
 
-### Module 4: Point-In-Time Recovery (PITR)
-*   **Concepts Learned:** Target time, Target LSN, Standby mode, and Promotion.
-*   **Why we need PITR:** If a developer accidentally runs a destructive query like `DROP TABLE users;` or `DELETE FROM orders;` without a `WHERE` clause, standard backups cannot save you without losing all subsequent good data. PITR allows you to roll the database forward to the exact LSN (Log Sequence Number) or millisecond *right before* the mistake occurred.
+### 3. [`scripts/`](file:///home/mdspl-sujith/sujith/pitr/scripts)
+BASH automation scripts used to manage the backups and restore executions:
+*   [`backup.sh`](file:///home/mdspl-sujith/sujith/pitr/scripts/backup.sh): Calls `pgbackrest backup` to take incremental/full database snapshots.
+*   [`restore.sh`](file:///home/mdspl-sujith/sujith/pitr/scripts/restore.sh): Stops the database container, performs a delta recovery back to the selected LSN/timestamp, restarts the container, and initiates WAL replay to promote the database.
+*   [`restore_fork.sh`](file:///home/mdspl-sujith/sujith/pitr/scripts/restore_fork.sh): Creates a temporary Docker volume, runs a delta restore up to the selected LSN in an isolated sandbox database, dumps the tables using `pg_dump`, and imports them to a target database connection URL with zero downtime.
 
-### Module 5: Real-Time WAL Analyzer Dashboard (Bun + Hono)
-*   **Why we added the UI:** 
-    *   **Visibility:** Looking at raw WAL binary is impossible. We created a real-time web UI using Bun and Hono that executes `pg_waldump` and parses physical records into human-readable actions (`INSERT`, `UPDATE`, `DELETE`, `DROP`).
-    *   **Precision:** Guessing the timestamp for a recovery leads to container startup crashes if it goes past the available log. The UI displays the exact LSN of each transaction, allowing you to trigger a restore to a mathematically precise point.
-
-### Module 6: Zero-Downtime Out-of-Place Fork Recovery
-*   **Why we need this feature:**
-    *   **In-Place Restore (Option 1):** Shuts down the live database and rolls it back, causing downtime and deleting all transactions written after the target restore time.
-    *   **Out-of-Place Fork (Option 2):** Keeps your live database **online** with zero downtime. It spins up a temporary PostgreSQL container, restores the backup up to the target LSN inside a sandboxed volume, runs `pg_dump`, streams the recovered table back into the target database URL, and cleans up the sandbox resources automatically.
+### 4. [`backups/`](file:///home/mdspl-sujith/sujith/pitr/backups)
+Local persistent storage folder containing your database backup assets:
+*   `backup/`: Contains compressed, incremental base backup directories and checksum manifests managed by pgBackRest.
+*   `archive/`: Contains compressed WAL log segment archives (`.gz`) pushed from PostgreSQL.
+*   `base/` & `wal/`: Static, uncompressed directories containing files from initial manual CLI training.
 
 ---
 
-## 🛠️ Lab Architecture & Configuration
+## ⚙️ Configuration Files Explained Section-by-Section
 
-```text
-                                         +-----------------------------+
-                                         |    Target Database URL      |
-                                         | (pg18:5434 / live database) |
-                                         +-----------------------------+
-                                                        ^
-                                                        | pg_restore stream
-                                                        |
-+--------------------------+  pgbackrest    +-------------------------+
-|   pgBackRest Repository  | -------------> |  postgres_recovery_temp |
-|   (/backups/backup/...)  |  LSN Restore   +-------------------------+
-+--------------------------+                (Temp recovery container)
-```
+### 1. PostgreSQL Configuration ([`postgres/postgresql.conf`](file:///home/mdspl-sujith/sujith/pitr/postgres/postgresql.conf))
 
-### Key Configs
-*   **PostgreSQL version:** `postgres:18-alpine`
-*   **Archiving configured in** [postgres/postgresql.conf](file:///home/mdspl-sujith/sujith/pitr/postgres/postgresql.conf):
-    ```ini
-    archive_mode = on
-    archive_command = 'pgbackrest --stanza=db archive-push %p'
-    ```
-*   **pgBackRest Config:** Mounted at [postgres/pgbackrest.conf](file:///home/mdspl-sujith/sujith/pitr/postgres/pgbackrest.conf).
+*   **`listen_addresses = '*'`**: Allows PostgreSQL to accept network connections from any interface (important inside Docker networks).
+*   **`shared_buffers = 128MB`**: Allocates the shared memory pool used for caching database pages. Important for Module 1 to understand how modifications are made in RAM first before being written to disk.
+*   **`wal_level = replica`**: Instructs PostgreSQL to write enough transaction details to the WAL so that we can run replication and Point-in-Time Recovery.
+*   **`fsync = on`**: Enforces physical disk flushes, ensuring that transaction commit records are safely written to physical storage.
+*   **`archive_mode = on`**: Activates PostgreSQL's background WAL archiving feature.
+*   **`archive_command = 'pgbackrest --stanza=db archive-push %p'`**: Whenever a WAL file is completed, PostgreSQL calls this command, pushing the file to the pgBackRest backup archive folder.
+*   **`logging_collector = on`**: Redirects log output from standard output to dedicated rotational log files inside the database directory.
+
+### 2. pgBackRest Configuration ([`postgres/pgbackrest.conf`](file:///home/mdspl-sujith/sujith/pitr/postgres/pgbackrest.conf))
+
+*   **`[db]` (Stanza Section)**:
+    *   `pg1-path=/var/lib/postgresql/18/docker`: Tells pgBackRest where the active PostgreSQL data files live inside the container.
+    *   `pg1-user=sujith`: The system user authorized to run backups.
+*   **`[global]` (Global Settings)**:
+    *   `repo1-path=/backups`: Specifies the target storage directory where backups and WAL files are archived.
+    *   `repo1-retention-full=2`: Retains a maximum of 2 full backup chains, purging older backups to save disk space.
+    *   `compress-type=zst`: Compresses backup directories and WAL logs using the Zstandard format for optimal compression and speed.
+    *   `start-fast=y`: Forces PostgreSQL to checkpoint immediately when a backup starts, avoiding long wait times.
+
+### 3. Docker Compose Setup ([`docker-compose.yml`](file:///home/mdspl-sujith/sujith/pitr/docker-compose.yml))
+
+*   **`postgres_pitr` Service**:
+    *   `build: ./postgres`: Uses the custom Dockerfile that packages `pgbackrest` inside PostgreSQL.
+    *   `ports: - "5432:5432"`: Maps the PostgreSQL port to the host machine.
+    *   `volumes`:
+        *   `pitr_pgdata:/var/lib/postgresql`: Mounts database data persistently.
+        *   `./backups:/backups`: Maps the host backup storage directory inside the container at `/backups`.
+        *   `./postgres/postgresql.conf:/etc/postgresql/postgresql.conf`: Overwrites default engine configurations.
+        *   `./postgres/pg_hba.conf:/etc/postgresql/pg_hba.conf`: Overwrites authentication permission configurations.
 
 ---
 
