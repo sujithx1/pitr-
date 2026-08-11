@@ -272,9 +272,15 @@
 
         <main>
             <div class="card">
-                <div class="meta-info">
+                <div class="meta-info" style="align-items: center; flex-wrap: wrap; gap: 1rem;">
                     <span>Active WAL File: <strong id="active-wal-file" style="font-family: monospace;">Loading...</strong></span>
-                    <button onclick="fetchData()" class="restore-btn" style="background: transparent; border: 1px solid var(--border-color); padding: 0.25rem 0.5rem;">Refresh</button>
+                    <div style="display: flex; gap: 1rem; align-items: center;">
+                        <label for="start-date" style="font-size: 0.85rem; color: var(--text-secondary);">Start Date:</label>
+                        <input type="date" id="start-date" style="padding: 0.25rem 0.5rem; border-radius: 6px; border: 1px solid var(--border-color); background: rgba(0,0,0,0.2); color: #fff; font-size: 0.8rem;">
+                        <label for="end-date" style="font-size: 0.85rem; color: var(--text-secondary);">End Date:</label>
+                        <input type="date" id="end-date" style="padding: 0.25rem 0.5rem; border-radius: 6px; border: 1px solid var(--border-color); background: rgba(0,0,0,0.2); color: #fff; font-size: 0.8rem;">
+                        <button onclick="fetchData()" class="restore-btn" style="background: transparent; border: 1px solid var(--border-color); padding: 0.25rem 0.5rem;">Filter</button>
+                    </div>
                 </div>
                 
                 <div id="timeline-container" class="timeline">
@@ -389,7 +395,16 @@
         async function fetchData() {
             await updateStatus();
             try {
-                const res = await fetch('/api/wal');
+                const startDate = document.getElementById('start-date').value;
+                const endDate = document.getElementById('end-date').value;
+                let url = '/api/wal';
+                
+                const params = new URLSearchParams();
+                if (startDate) params.append('start_date', startDate);
+                if (endDate) params.append('end_date', endDate);
+                if (params.toString()) url += '?' + params.toString();
+
+                const res = await fetch(url);
                 const data = await res.json();
                 
                 document.getElementById('active-wal-file').innerText = data.activeWalFile || 'None';
@@ -397,12 +412,14 @@
                 const container = document.getElementById('timeline-container');
                 container.innerHTML = '';
 
-                if (!data.events || data.events.length === 0) {
-                    container.innerHTML = `<p style="text-align: center; color: var(--text-secondary);">No client transactions found in current WAL segment.</p>`;
+                let eventsToRender = data.events;
+
+                if (!eventsToRender || eventsToRender.length === 0) {
+                    container.innerHTML = `<p style="text-align: center; color: var(--text-secondary);">No client transactions found for the selected date/segment.</p>`;
                     return;
                 }
 
-                data.events.forEach(event => {
+                eventsToRender.forEach(event => {
                     const item = document.createElement('div');
                     item.className = 'timeline-item';
 

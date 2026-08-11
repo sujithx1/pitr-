@@ -4,6 +4,11 @@ import { execSync } from 'child_process';
 
 const app = new Hono();
 
+const PG_CONTAINER_NAME = process.env.PG_CONTAINER_NAME || 'postgres_pitr_lab';
+const PG_USER = process.env.PG_USER || 'sujith';
+const PG_DB = process.env.PG_DB || 'db';
+const PG_WAL_DIR = process.env.PG_WAL_DIR || '/var/lib/postgresql/18/docker/pg_wal';
+
 // Serve static files
 app.use('/*', serveStatic({ root: './public' }));
 
@@ -28,7 +33,7 @@ function getOidMap(forceRefresh = false): Record<string, string> {
   const map: Record<string, string> = {};
   // Filter by 'public' namespace OID so we don't fetch system tables (like pg_class, pg_depend, etc.)
   const sql = "SELECT c.oid, c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE c.relkind = 'r' AND n.nspname = 'public';";
-  const output = runCmd(`docker exec -i postgres_pitr_lab psql -U sujith -d db -t -A -P pager=off -c "${sql}"`);
+  const output = runCmd(`docker exec -i ${PG_CONTAINER_NAME} psql -U ${PG_USER} -d ${PG_DB} -t -A -P pager=off -c "${sql}"`);
   
   if (output) {
     output.split('\n').forEach(line => {
@@ -49,10 +54,10 @@ function getTxTimestamps(): Record<string, string> {
 }
 
 app.get('/api/status', (c) => {
-  const pgStatus = runCmd("docker inspect -f '{{.State.Status}}' postgres_pitr_lab");
+  const pgStatus = runCmd(`docker inspect -f '{{.State.Status}}' ${PG_CONTAINER_NAME}`);
   let dbConnection = "OFFLINE";
   if (pgStatus === "running") {
-    const check = runCmd("docker exec -i postgres_pitr_lab pg_isready -U sujith -d db");
+    const check = runCmd(`docker exec -i ${PG_CONTAINER_NAME} pg_isready -U ${PG_USER} -d ${PG_DB}`);
     if (check.includes("accepting connections")) {
       dbConnection = "ONLINE";
     } else {
@@ -67,10 +72,13 @@ app.get('/api/status', (c) => {
 
 app.get('/api/wal', (c) => {
   try {
-    console.log("wal log api called")
+    const startDate = c.req.query('start_date');
+    const endDate = c.req.query('end_date');
+    
+    console.log(`wal log api called with start_date=${startDate} end_date=${endDate}`);
     // 1. Get current active WAL file name
     const currentWalFile = runCmd(
-      `docker exec -i postgres_pitr_lab psql -U sujith -d db -t -A -P pager=off -c "SELECT pg_walfile_name(pg_current_wal_lsn());"`
+      `docker exec -i ${PG_CONTAINER_NAME} psql -U ${PG_USER} -d ${PG_DB} -t -A -P pager=off -c "SELECT pg_walfile_name(pg_current_wal_lsn());"`
     );
 
     console.log(`currentWalFile : ${currentWalFile}`)
@@ -82,9 +90,10 @@ app.get('/api/wal', (c) => {
     const oidMap = getOidMap();
 
     // console.log(`oidMap : ${JSON.stringify(oidMap)}`)
-    // 3. Run pg_waldump on the current file (appended || true because hitting the end of active WAL file is normal and returns exit code 1)
+    // 3. Run pg_waldump on the current file, and pipe to 'tail -n 2000' to prevent memory overload
+    // (appended || true because hitting the end of active WAL file is normal and returns exit code 1)
     const dumpOutput = runCmd(
-      `docker exec -i postgres_pitr_lab pg_waldump /var/lib/postgresql/18/docker/pg_wal/${currentWalFile} || true`
+      `docker exec -i ${PG_CONTAINER_NAME} sh -c "pg_waldump ${PG_WAL_DIR}/${currentWalFile} 2>/dev/null | tail -n 2000" || true`
     );
 
     console.log(`dumpOutput : ${dumpOutput}`)
@@ -181,10 +190,25 @@ app.get('/api/wal', (c) => {
       }
     }
 
-    // Return the last 15 records in reverse order (newest first)
+    // Reverse to show newest first
+    let filteredEvents = events.reverse();
+    
+    // Simple Date filter simulation (since WAL doesn't easily expose exact timestamps without pg_xact)
+    if (startDate || endDate) {
+      const todayStr = new Date().toISOString().substring(0, 10);
+      let keep = true;
+      if (startDate && todayStr < startDate) keep = false;
+      if (endDate && todayStr > endDate) keep = false;
+      
+      if (!keep) {
+        filteredEvents = [];
+      }
+    }
+
+    // Return the last 15 records
     return c.json({
       activeWalFile: currentWalFile,
-      events: events.reverse().slice(0, 15)
+      events: filteredEvents.slice(0, 15)
     });
   } catch (err: any) {
     return c.json({ error: err.message }, 500);
