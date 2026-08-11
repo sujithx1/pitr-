@@ -149,7 +149,7 @@ app.get('/api/wal', (c) => {
           if (relsMatch && relsMatch[1]) {
             const droppedOids = relsMatch[1].trim().split(/\s+/).map(r => {
               const parts = r.split('/');
-              return parts[parts.length - 1];
+              return parts[parts.length - 1] || '';
             });
             
             // Check if any of the dropped OIDs are user tables (OID >= 16384)
