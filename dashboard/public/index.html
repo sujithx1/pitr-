@@ -317,8 +317,51 @@
         </div>
     </div>
 
+    <!-- Toast Notification Container -->
+    <div id="toast-container" style="position: fixed; bottom: 20px; right: 20px; z-index: 1000; display: flex; flex-direction: column; gap: 10px;"></div>
+
     <script>
         let selectedTimestamp = '';
+
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.style.padding = '0.75rem 1.25rem';
+            toast.style.borderRadius = '8px';
+            toast.style.color = '#fff';
+            toast.style.fontSize = '0.85rem';
+            toast.style.fontWeight = '600';
+            toast.style.boxShadow = '0 4px 12px rgba(0,0,0,0.3)';
+            toast.style.transition = 'all 0.3s ease';
+            toast.style.opacity = '0';
+            toast.style.transform = 'translateY(20px)';
+            
+            if (type === 'success') {
+                toast.style.background = '#10b981';
+            } else if (type === 'error') {
+                toast.style.background = '#ef4444';
+            } else {
+                toast.style.background = '#3b82f6';
+            }
+
+            toast.innerText = message;
+            container.appendChild(toast);
+
+            // Animate in
+            setTimeout(() => {
+                toast.style.opacity = '1';
+                toast.style.transform = 'translateY(0)';
+            }, 50);
+
+            // Remove after 4 seconds
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateY(-20px)';
+                setTimeout(() => {
+                    toast.remove();
+                }, 300);
+            }, 4000);
+        }
 
         async function updateStatus() {
             try {
@@ -421,7 +464,7 @@
             const targetDbUrl = isFork ? document.getElementById('target-db-url').value.trim() : null;
 
             if (isFork && !targetDbUrl) {
-                alert('Please enter a target database connection URL.');
+                showToast('Please enter a target database connection URL.', 'error');
                 return;
             }
 
@@ -443,12 +486,12 @@
                 const data = await res.json();
                 
                 if (data.success) {
-                    alert('Restore completed successfully!');
+                    showToast('Restore completed successfully!', 'success');
                 } else {
-                    alert('Restore failed: ' + data.error);
+                    showToast('Restore failed: ' + data.error, 'error');
                 }
             } catch (err) {
-                alert('Connection error during restore.');
+                showToast('Connection error during restore.', 'error');
             } finally {
                 closeModal();
                 setTimeout(fetchData, isFork ? 2000 : 6000); // refresh after 6 seconds if in-place
