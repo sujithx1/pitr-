@@ -1,8 +1,13 @@
 #!/bin/bash
 set -e
 
-CONTAINER_NAME="postgres_pitr_lab"
-STANZA_NAME="db"
+# Load environment variables if .env exists
+if [ -f "$(dirname "$0")/../dashboard/.env" ]; then
+    export $(grep -v '^#' "$(dirname "$0")/../dashboard/.env" | xargs)
+fi
+
+CONTAINER_NAME=${PG_CONTAINER_NAME:-"postgres_pitr_lab"}
+STANZA_NAME=${STANZA_NAME:-"db"}
 
 echo "=========================================="
 echo "Starting pgBackRest Backup Pipeline"

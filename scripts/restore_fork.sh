@@ -4,6 +4,13 @@ set -e
 # Change directory to project root
 cd "$(dirname "$0")/.."
 
+# Load environment variables if .env exists
+if [ -f "dashboard/.env" ]; then
+    export $(grep -v '^#' "dashboard/.env" | xargs)
+fi
+
+STANZA_NAME=${STANZA_NAME:-"db"}
+
 TARGET_LSN=$1
 TARGET_DB_URL=$2
 
@@ -34,7 +41,7 @@ docker run --rm \
     -v "$(pwd)/backups:/backups" \
     -v "$(pwd)/postgres/pgbackrest.conf:/etc/pgbackrest/pgbackrest.conf" \
     pitr-postgres_pitr:latest \
-    pgbackrest --stanza=db --type=lsn --target="$TARGET_LSN" --target-action=promote restore
+    pgbackrest --stanza="$STANZA_NAME" --type=lsn --target="$TARGET_LSN" --target-action=promote restore
 
 # 3. Start temporary database container using recovery volume
 echo "[3/6] Starting temporary recovery database container..."
