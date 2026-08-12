@@ -8,11 +8,14 @@ echo "=========================================="
 echo "Starting pgBackRest Backup Pipeline"
 echo "=========================================="
 
+# Determine backup type from argument (default to 'incr')
+BACKUP_TYPE=${1:-incr}
+
 # 1. Trigger pgBackRest backup inside Docker container
-echo "[1/2] Executing pgBackRest backup..."
+echo "[1/2] Executing pgBackRest backup (Type: $BACKUP_TYPE)..."
 docker exec -u postgres -i "$CONTAINER_NAME" pgbackrest \
     --stanza="$STANZA_NAME" \
-    --type=incr \
+    --type="$BACKUP_TYPE" \
     backup
 
 # 2. Verify backups using pgbackrest info command

@@ -309,7 +309,7 @@
 
             <div id="fork-fields" style="display: none; text-align: left; margin-bottom: 1rem;">
                 <label style="font-size: 0.8rem; color: var(--text-secondary); display: block; margin-bottom: 0.25rem;">Target Database Connection URL:</label>
-                <input type="text" id="target-db-url" placeholder="postgresql://sujith:sujith@localhost:5432/db" style="width: 100%; padding: 0.5rem; border-radius: 6px; border: 1px solid var(--border-color); background: rgba(0,0,0,0.2); color: #fff; font-family: monospace; font-size: 0.8rem;">
+                <input type="text" id="target-db-url" value="postgresql://sujith:sujith@localhost:5432/db" placeholder="postgresql://sujith:sujith@localhost:5432/db" style="width: 100%; padding: 0.5rem; border-radius: 6px; border: 1px solid var(--border-color); background: rgba(0,0,0,0.2); color: #fff; font-family: monospace; font-size: 0.8rem;">
             </div>
 
             <div id="modal-actions" class="modal-buttons">
@@ -473,7 +473,7 @@
             document.getElementById('modal-loading').style.display = 'none';
             document.getElementById('restore-mode-inplace').checked = true;
             document.getElementById('fork-fields').style.display = 'none';
-            document.getElementById('target-db-url').value = '';
+            document.getElementById('target-db-url').value = 'postgresql://sujith:sujith@localhost:5432/db';
         }
 
         async function triggerRestore() {

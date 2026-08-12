@@ -75,13 +75,11 @@ app.get('/api/wal', (c) => {
     const startDate = c.req.query('start_date');
     const endDate = c.req.query('end_date');
     
-    console.log(`wal log api called with start_date=${startDate} end_date=${endDate}`);
     // 1. Get current active WAL file name
     const currentWalFile = runCmd(
       `docker exec -i ${PG_CONTAINER_NAME} psql -U ${PG_USER} -d ${PG_DB} -t -A -P pager=off -c "SELECT pg_walfile_name(pg_current_wal_lsn());"`
     );
 
-    console.log(`currentWalFile : ${currentWalFile}`)
     if (!currentWalFile) {
       return c.json({ error: "Could not fetch active WAL file" }, 500);
     }
@@ -96,7 +94,6 @@ app.get('/api/wal', (c) => {
       `docker exec -i ${PG_CONTAINER_NAME} sh -c "pg_waldump ${PG_WAL_DIR}/${currentWalFile} 2>/dev/null | tail -n 2000" || true`
     );
 
-    console.log(`dumpOutput : ${dumpOutput}`)
     if (!dumpOutput) {
       return c.json({ events: [] });
     }

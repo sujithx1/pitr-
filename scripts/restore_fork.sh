@@ -42,6 +42,8 @@ docker run -d \
     --name "$TEMP_CONTAINER" \
     --network pitr_default \
     -v "$TEMP_VOLUME":/var/lib/postgresql \
+    -v "$(pwd)/backups:/backups" \
+    -v "$(pwd)/postgres/pgbackrest.conf:/etc/pgbackrest/pgbackrest.conf" \
     -v "$(pwd)/postgres/postgresql.conf:/etc/postgresql/postgresql.conf" \
     -v "$(pwd)/postgres/pg_hba.conf:/etc/postgresql/pg_hba.conf" \
     -p 5433:5432 \
@@ -60,13 +62,15 @@ sleep 3
 echo " -> Recovery database is online and promoted!"
 
 # 5. Extract tables and pipe them directly into target database URL
-echo "[5/6] Exporting tables and restoring to target database..."
-# Note: We run pg_dump inside the temp container and pipe to psql connecting to the target database URL
-# --clean clears existing tables on target, --if-exists avoids errors on clean
-docker exec -i "$TEMP_CONTAINER" pg_dump -U sujith -d db --clean --if-exists | docker exec -i "$TEMP_CONTAINER" psql "$TARGET_DB_URL"
+echo "[5/7] Wiping target database (dropping public schema)..."
+docker exec -i "$TEMP_CONTAINER" psql "$TARGET_DB_URL" -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
 
-# 6. Cleanup temporary resources
-echo "[6/6] Cleaning up temporary container and volume..."
+echo "[6/7] Exporting tables and restoring to target database..."
+# Note: We run pg_dump inside the temp container and pipe to psql connecting to the target database URL
+docker exec -i "$TEMP_CONTAINER" pg_dump -U sujith -d db | docker exec -i "$TEMP_CONTAINER" psql "$TARGET_DB_URL"
+
+# 7. Cleanup temporary resources
+echo "[7/7] Cleaning up temporary container and volume..."
 docker stop "$TEMP_CONTAINER"
 docker rm "$TEMP_CONTAINER"
 docker volume rm "$TEMP_VOLUME"
