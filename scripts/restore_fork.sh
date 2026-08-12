@@ -29,8 +29,11 @@ echo "=================================================="
 TEMP_VOLUME="pitr_pgdata_temp"
 TEMP_CONTAINER="postgres_pitr_recovery_temp"
 
-# 1. Create temporary Docker volume
+# 1. Create temporary recovery volume
 echo "[1/6] Creating temporary recovery volume..."
+docker stop "$TEMP_CONTAINER" 2>/dev/null || true
+docker rm "$TEMP_CONTAINER" 2>/dev/null || true
+docker volume rm "$TEMP_VOLUME" 2>/dev/null || true
 docker volume create "$TEMP_VOLUME"
 
 # 2. Run pgBackRest restore on the temporary volume
@@ -69,8 +72,15 @@ sleep 3
 echo " -> Recovery database is online and promoted!"
 
 # 5. Extract tables and pipe them directly into target database URL
-echo "[5/7] Wiping target database (dropping public schema)..."
-docker exec -i "$TEMP_CONTAINER" psql "$TARGET_DB_URL" -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
+echo "[5/7] Preparing target database..."
+# Extract the database name and the base URL (pointing to the default 'postgres' db)
+TARGET_DB_NAME=$(echo "$TARGET_DB_URL" | sed 's/.*\///')
+BASE_DB_URL=$(echo "$TARGET_DB_URL" | sed 's/\/[^\/]*$/\/postgres/')
+
+# Connect to the default 'postgres' database to drop and recreate the target database
+# WITH (FORCE) forcefully disconnects any active users so the drop succeeds instantly
+docker exec -i "$TEMP_CONTAINER" psql "$BASE_DB_URL" -c "DROP DATABASE IF EXISTS \"$TARGET_DB_NAME\" WITH (FORCE);"
+docker exec -i "$TEMP_CONTAINER" psql "$BASE_DB_URL" -c "CREATE DATABASE \"$TARGET_DB_NAME\";"
 
 echo "[6/7] Exporting tables and restoring to target database..."
 # Note: We run pg_dump inside the temp container and pipe to psql connecting to the target database URL
