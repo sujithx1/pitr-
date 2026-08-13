@@ -441,9 +441,7 @@
                             <div class="event-detail">${event.detail}</div>
                         </div>
                         <div>
-                            <button class="restore-btn" onclick="openRestoreModal('${event.lsn}')">
-                                Restore to LSN
-                            </button>
+                            ${event.opType === 'COMMIT' ? `<button class="restore-btn" onclick="openRestoreModal('${event.lsn}')">Restore to LSN</button>` : ''}
                         </div>
                     `;
                     container.appendChild(item);

@@ -33,7 +33,7 @@ function getOidMap(forceRefresh = false): Record<string, string> {
   const map: Record<string, string> = {};
   // Filter by 'public' namespace OID so we don't fetch system tables (like pg_class, pg_depend, etc.)
   const sql = "SELECT c.oid, c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE c.relkind = 'r' AND n.nspname = 'public';";
-  const output = runCmd(`docker exec -i ${PG_CONTAINER_NAME} psql -U ${PG_USER} -d ${PG_DB} -t -A -P pager=off -c "${sql}"`);
+  const output = runCmd(`docker exec ${PG_CONTAINER_NAME} psql -U ${PG_USER} -d ${PG_DB} -t -A -P pager=off -c "${sql}"`);
   
   if (output) {
     output.split('\n').forEach(line => {
@@ -57,7 +57,7 @@ app.get('/api/status', (c) => {
   const pgStatus = runCmd(`docker inspect -f '{{.State.Status}}' ${PG_CONTAINER_NAME}`);
   let dbConnection = "OFFLINE";
   if (pgStatus === "running") {
-    const check = runCmd(`docker exec -i ${PG_CONTAINER_NAME} pg_isready -U ${PG_USER} -d ${PG_DB}`);
+    const check = runCmd(`docker exec ${PG_CONTAINER_NAME} pg_isready -U ${PG_USER} -d ${PG_DB}`);
     if (check.includes("accepting connections")) {
       dbConnection = "ONLINE";
     } else {
@@ -77,7 +77,7 @@ app.get('/api/wal', (c) => {
     
     // 1. Get current active WAL file name
     const currentWalFile = runCmd(
-      `docker exec -i ${PG_CONTAINER_NAME} psql -U ${PG_USER} -d ${PG_DB} -t -A -P pager=off -c "SELECT pg_walfile_name(pg_current_wal_lsn());"`
+      `docker exec ${PG_CONTAINER_NAME} psql -U ${PG_USER} -d ${PG_DB} -t -A -P pager=off -c "SELECT pg_walfile_name(pg_current_wal_lsn());"`
     );
 
     if (!currentWalFile) {
@@ -91,7 +91,7 @@ app.get('/api/wal', (c) => {
     // 3. Run pg_waldump on the current file, and pipe to 'tail -n 2000' to prevent memory overload
     // (appended || true because hitting the end of active WAL file is normal and returns exit code 1)
     const dumpOutput = runCmd(
-      `docker exec -i ${PG_CONTAINER_NAME} sh -c "pg_waldump ${PG_WAL_DIR}/${currentWalFile} 2>/dev/null | tail -n 2000" || true`
+      `docker exec ${PG_CONTAINER_NAME} sh -c "pg_waldump -r Heap -r Transaction ${PG_WAL_DIR}/${currentWalFile} 2>/dev/null | tail -n 2000" || true`
     );
 
     if (!dumpOutput) {
@@ -128,8 +128,12 @@ app.get('/api/wal', (c) => {
       if (tableOid) {
         if (!oidMap[tableOid]) {
           Object.assign(oidMap, getOidMap(true));
+          // If it's still not found (e.g. table was dropped), mark it so we don't spam getOidMap
+          if (!oidMap[tableOid]) {
+             oidMap[tableOid] = `Relation ${tableOid}`;
+          }
         }
-        tableName = oidMap[tableOid] || `Relation ${tableOid}`;
+        tableName = oidMap[tableOid];
       }
 
       // Filter for interesting client operations
@@ -241,5 +245,6 @@ app.post('/api/restore', async (c) => {
 
 export default {
   port: 3001,
+  idleTimeout: 255,
   fetch: app.fetch,
 };
