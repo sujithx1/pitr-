@@ -7,9 +7,9 @@ services:
     container_name: postgres_db_18
     restart: always
     environment:
-      POSTGRES_USER: dev
-      POSTGRES_PASSWORD: devpostgres@123
-      POSTGRES_DB: tally_db
+      POSTGRES_USER: $${POSTGRES_USER}
+      POSTGRES_PASSWORD: $${POSTGRES_PASSWORD}
+      POSTGRES_DB: $${POSTGRES_DB}
       TZ: Asia/Kolkata
       PGDATA: /var/lib/postgresql/18/docker
     ports:
