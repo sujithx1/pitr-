@@ -62,7 +62,7 @@ docker run -d \
 
 # 4. Wait for temporary container to recover and promote
 echo "[4/6] Waiting for recovery database to become ready..."
-until docker exec "$TEMP_CONTAINER" pg_isready -U sujith -d db &>/dev/null; do
+until docker exec "$TEMP_CONTAINER" pg_isready -U "${PG_USER:-sujith}" -d "${PG_DB:-db}" &>/dev/null; do
     echo " -> Waiting for database startup..."
     sleep 2
 done
@@ -84,7 +84,7 @@ docker exec -i "$TEMP_CONTAINER" psql "$BASE_DB_URL" -c "CREATE DATABASE \"$TARG
 
 echo "[6/7] Exporting tables and restoring to target database..."
 # Note: We run pg_dump inside the temp container and pipe to psql connecting to the target database URL
-docker exec -i "$TEMP_CONTAINER" pg_dump -U sujith -d db | docker exec -i "$TEMP_CONTAINER" psql "$TARGET_DB_URL"
+docker exec -i "$TEMP_CONTAINER" pg_dump -U "${PG_USER:-sujith}" -d "${PG_DB:-db}" | docker exec -i "$TEMP_CONTAINER" psql "$TARGET_DB_URL"
 
 # 7. Cleanup temporary resources
 echo "[7/7] Cleaning up temporary container and volume..."

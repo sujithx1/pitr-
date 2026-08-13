@@ -62,7 +62,7 @@ sleep 5
 
 echo "------------------------------------------"
 echo "Verifying restored table status:"
-docker exec -t "$CONTAINER_NAME" psql -U sujith -d db -c "SELECT * FROM users;" || echo " -> Recovery in progress or table not recovered."
+docker exec -t "$CONTAINER_NAME" psql -U "${PG_USER:-sujith}" -d "${PG_DB:-db}" -c "SELECT * FROM users;" || echo " -> Recovery in progress or table not recovered."
 echo "------------------------------------------"
 
 
