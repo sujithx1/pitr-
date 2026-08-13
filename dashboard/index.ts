@@ -244,7 +244,7 @@ app.post('/api/restore', async (c) => {
 });
 
 export default {
-  port: 3001,
+  port: process.env.PORT || 3001,
   idleTimeout: 255,
   fetch: app.fetch,
 };
