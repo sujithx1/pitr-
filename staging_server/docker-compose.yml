@@ -1,0 +1,37 @@
+version: "3.9"
+
+services:
+  db:
+    # We must build a custom image to install pgBackRest
+    build: ./postgres
+    container_name: postgres_db_18
+    restart: always
+    environment:
+      POSTGRES_USER: dev
+      POSTGRES_PASSWORD: devpostgres@123
+      POSTGRES_DB: tally_db
+      TZ: Asia/Kolkata
+      PGDATA: /var/lib/postgresql/18/docker
+    ports:
+      - "5433:5432"
+    volumes:
+      # Your existing database volume
+      - ./postgres_data:/var/lib/postgresql/18/docker
+      
+      # The configuration files required for PITR
+      - ./postgres/postgresql.conf:/etc/postgresql/postgresql.conf
+      - ./postgres/pg_hba.conf:/etc/postgresql/pg_hba.conf
+      - ./postgres/pgbackrest.conf:/etc/pgbackrest/pgbackrest.conf
+      
+      # The local backups folder (for staging)
+      - ./backups:/backups
+
+    # Tell PostgreSQL to use the custom config files
+    command:
+      [
+        "postgres",
+        "-c",
+        "config_file=/etc/postgresql/postgresql.conf",
+        "-c",
+        "hba_file=/etc/postgresql/pg_hba.conf"
+      ]
