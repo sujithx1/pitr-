@@ -22,8 +22,10 @@ fi
 
 echo "=================================================="
 echo "Starting Out-of-Place Recovery Pipeline (Fork)"
-echo "Target LSN: $TARGET_LSN"
-echo "Target DB:  $TARGET_DB_URL"
+echo "Target Container: $CONTAINER_NAME"
+echo "Image Name:       $IMAGE_NAME"
+echo "Target LSN:       $TARGET_LSN"
+echo "Target DB:        $TARGET_DB_URL"
 echo "=================================================="
 
 TEMP_VOLUME="pitr_pgdata_temp"
@@ -43,7 +45,7 @@ docker run --rm \
     -v "$TEMP_VOLUME":/var/lib/postgresql \
     -v "$(pwd)/backups:/backups" \
     -v "$(pwd)/postgres/pgbackrest.conf:/etc/pgbackrest/pgbackrest.conf" \
-    pitr-postgres_pitr:latest \
+    "$IMAGE_NAME" \
     pgbackrest --stanza="$STANZA_NAME" --type=lsn --target="$TARGET_LSN" --target-action=promote restore
 
 # 3. Start temporary database container using recovery volume
@@ -57,7 +59,7 @@ docker run -d \
     -v "$(pwd)/postgres/postgresql.conf:/etc/postgresql/postgresql.conf" \
     -v "$(pwd)/postgres/pg_hba.conf:/etc/postgresql/pg_hba.conf" \
     -p 5433:5432 \
-    pitr-postgres_pitr:latest \
+    "$IMAGE_NAME" \
     postgres -c config_file=/etc/postgresql/postgresql.conf -c hba_file=/etc/postgresql/pg_hba.conf
 
 # 4. Wait for temporary container to recover and promote

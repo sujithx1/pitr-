@@ -4,10 +4,19 @@ set -e
 # Load environment variables if .env exists
 if [ -f "$(dirname "$0")/../dashboard/.env" ]; then
     export $(grep -v '^#' "$(dirname "$0")/../dashboard/.env" | xargs)
+    fi
+
+CONTAINER_NAME=${PG_CONTAINER_NAME:-"postgres_db_18"}
+if ! docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
+    if docker ps --format '{{.Names}}' | grep -q "^postgres_pitr_lab$"; then
+        CONTAINER_NAME="postgres_pitr_lab"
+    fi
 fi
 
-CONTAINER_NAME=${PG_CONTAINER_NAME:-"postgres_pitr_lab"}
+# Auto-detect exact image name from running database container
+IMAGE_NAME=$(docker inspect -f '{{.Config.Image}}' "$CONTAINER_NAME" 2>/dev/null || echo "postgres:18")
 STANZA_NAME=${STANZA_NAME:-"db"}
+
 # Check if target timestamp is passed as an argument
 TARGET_TIME=$1
 
@@ -23,7 +32,9 @@ fi
 
 echo "=========================================="
 echo "Starting pgBackRest Recovery Pipeline"
-echo "Target Time: $TARGET_TIME"
+echo "Target Container: $CONTAINER_NAME"
+echo "Image Name:       $IMAGE_NAME"
+echo "Target Time:      $TARGET_TIME"
 echo "=========================================="
 
 # Change directory to project root (one level up from scripts/)
@@ -38,23 +49,27 @@ else
     echo " -> Detected timestamp recovery target."
 fi
 
+# Determine compose directory (staging_server or root)
+COMPOSE_DIR="."
+if [ -f "staging_server/docker-compose.yml" ]; then
+    COMPOSE_DIR="staging_server"
+fi
+
 # 1. Stop PostgreSQL container
 echo "[1/4] Stopping PostgreSQL database container..."
-docker compose stop
+docker compose -f "$COMPOSE_DIR/docker-compose.yml" stop || docker stop "$CONTAINER_NAME"
 
-# 2. Run pgBackRest delta restore using a temporary helper container mounting the same volumes
+# 2. Run pgBackRest delta restore using helper container with auto-detected image
 echo "[2/4] Executing pgBackRest delta restore in helper container..."
 docker run --rm \
     --user postgres \
-    -v pitr_pgdata:/var/lib/postgresql \
-    -v "$(pwd)/backups:/backups" \
-    -v "$(pwd)/postgres/pgbackrest.conf:/etc/pgbackrest/pgbackrest.conf" \
-    pitr-postgres_pitr:latest \
+    --volumes-from "$CONTAINER_NAME" \
+    "$IMAGE_NAME" \
     pgbackrest --stanza="$STANZA_NAME" --delta $TYPE_FLAG --target="$TARGET_TIME" --target-action=promote restore
 
 # 3. Start PostgreSQL container back up
 echo "[3/4] Starting PostgreSQL database container..."
-docker compose start
+docker compose -f "$COMPOSE_DIR/docker-compose.yml" start || docker start "$CONTAINER_NAME"
 
 # 4. Wait for database to start and print confirmation
 echo "[4/4] Waiting for database to recover and accept connections..."
