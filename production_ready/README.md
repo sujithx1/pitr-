@@ -10,14 +10,15 @@ It is structured as a **100% separate, independent folder**, keeping the origina
 ```text
 production_ready/
 ├── dashboard/
-│   ├── logical_streamer.ts    # Logical Decoding (wal2json) JSON stream server (Port 4001)
-│   ├── metrics.ts             # Prometheus metrics exporter
-│   └── package.json           # Independent Bun + Hono dependencies
+│   ├── logical_streamer.ts         # Logical Decoding (wal2json) JSON stream server (Port 4001)
+│   ├── metrics.ts                  # Prometheus metrics exporter
+│   ├── public/index.html           # Dark glassmorphic Web UI for logical decoding stream
+│   └── package.json                # Independent Bun + Hono dependencies
 ├── scripts/
-│   ├── alert.sh               # Standalone Slack / PagerDuty / Teams webhook alert tool
-│   ├── backup_with_alert.sh   # Backup pipeline wrapper triggering automated webhook alerts
-│   ├── setup_s3_backup.sh     # CLI tool to configure pgBackRest AWS S3 cloud backups
-│   └── restore_cluster_clone.sh # Physical cluster promotion engine for 5TB+ databases
+│   ├── alert.sh                    # Standalone Slack / PagerDuty / Teams webhook alert tool
+│   ├── backup_with_alert.sh        # Backup pipeline wrapper triggering automated webhook alerts
+│   ├── setup_s3_backup.sh          # CLI tool to configure pgBackRest AWS S3 cloud backups
+│   └── restore_cluster_clone.sh    # Physical cluster promotion engine for 5TB+ databases
 └── postgres/
     └── pgbackrest_s3.conf.template # AWS S3 pgBackRest config template with AES-256 encryption
 ```
@@ -26,12 +27,14 @@ production_ready/
 
 ## 🚀 Usage Guide
 
-### 1. Logical Decoding Real-Time Engine (Dashboard)
-Runs a standalone streaming API server on port `4001`:
+### 1. Logical Decoding Real-Time Web UI & Server
+Runs a standalone streaming API server and dark glassmorphic dashboard on port `4001`:
 ```bash
 cd production_ready/dashboard
 bun run logical_streamer.ts
 ```
+* **Open Browser**: `http://localhost:4001`
+* **Features**: Live decoded transaction timeline, replication slot initialization button (`pitr_logical_slot`), transaction throughput counters.
 
 ### 2. Automated Webhook Alerting
 Run backups with Slack/Teams alerts:

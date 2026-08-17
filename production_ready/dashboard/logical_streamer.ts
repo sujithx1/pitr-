@@ -4,6 +4,7 @@
 // ==============================================================================
 
 import { Hono } from 'hono';
+import { serveStatic } from 'hono/bun';
 import { execSync } from 'child_process';
 
 const app = new Hono();
@@ -11,6 +12,9 @@ const app = new Hono();
 const PG_CONTAINER = process.env.PG_CONTAINER_NAME || 'postgres_db_18';
 const PG_USER = process.env.PG_USER || 'dev';
 const PG_DB = process.env.PG_DB || 'mds';
+
+// Serve static UI assets from ./public
+app.use('/*', serveStatic({ root: './public' }));
 
 function runSql(sql: string): string {
   try {
