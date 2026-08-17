@@ -7,7 +7,7 @@ backups/archive/*
 !backups/archive/.gitkeep
 backups/backup/*
 !backups/backup/.gitkeep
-
+node_modules
 
 # Ignore runtime logs and lock files
 *.log
