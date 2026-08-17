@@ -21,10 +21,11 @@ echo "Starting pgBackRest Backup Pipeline"
 echo "Target Container: $CONTAINER_NAME"
 echo "=========================================="
 
-# Auto-initialize stanza if backup.info has not been created yet
-if ! docker exec -u postgres -i "$CONTAINER_NAME" pgbackrest --stanza="$STANZA_NAME" info &>/dev/null; then
-    echo "[0/2] Stanza '$STANZA_NAME' not initialized. Running stanza-create..."
-    docker exec -u postgres -i "$CONTAINER_NAME" pgbackrest --stanza="$STANZA_NAME" stanza-create || true
+# Ensure /backups directory permissions and auto-initialize stanza if backup.info is missing
+if ! docker exec -u postgres -i "$CONTAINER_NAME" test -f "/backups/backup/$STANZA_NAME/backup.info"; then
+    echo "[0/2] Initializing pgBackRest stanza '$STANZA_NAME'..."
+    docker exec -u root -i "$CONTAINER_NAME" chown -R postgres:postgres /backups 2>/dev/null || true
+    docker exec -u postgres -i "$CONTAINER_NAME" pgbackrest --stanza="$STANZA_NAME" stanza-create
 fi
 
 # Determine backup type from argument (default to 'incr')
