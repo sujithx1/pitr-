@@ -32,3 +32,14 @@ docker exec -it postgres_pitr_prod psql -U dev -d mds -c "INSERT INTO users (nam
 ```
 
 The logical streamer will immediately pick up the new transaction and render a live card on your dashboard (`http://localhost:4001`)!
+
+---
+
+## 4. Q: If I insert a new row, will OLD historical changes come back?
+
+**NO! Old changes will NOT come back or repeat.**
+
+* **Why?**: PostgreSQL logical slots advance forward in time. Once an event is read by the slot, it is consumed and removed from the active queue forever.
+* **What appears on new Insert?**: **ONLY the brand-new transaction** will appear in the stream.
+* **Where is old data stored?**: All old/historical records remain safely stored inside PostgreSQL database tables (`SELECT * FROM users;`). The logical slot stream is a **live change feed**, not a static database table dump.
+

@@ -33,3 +33,16 @@ docker exec -u postgres postgres_pitr_prod psql -U dev -d mds -c "SELECT pg_swit
 ```
 
 This immediately forces PostgreSQL to rotate its current active WAL file and flush all unarchived transactions directly into `/backups/archive/db` right before recovery starts!
+
+---
+
+## 4. What Happens When Connected to AWS S3 Cloud Storage?
+
+**YES! They will show up directly inside your AWS S3 bucket!**
+
+When you connect pgBackRest to AWS S3 Cloud Storage (`repo1-type=s3`):
+
+1. **Automatic Cloud Push**: Whenever a 16MB WAL segment fills up or `SELECT pg_switch_wal();` runs, `pgBackRest` uploads the compressed WAL file directly to `s3://your-bucket-name/archive/db/`.
+2. **AWS Console Visibility**: If you log into your AWS S3 Console or AWS CLI (`aws s3 ls s3://your-bucket-name/archive/db/`), you will see all compressed `.zst` WAL log files.
+3. **Same 16MB Rule**: The exact same 16MB / `pg_switch_wal()` rule applies to S3 as it does to local disk storage!
+
