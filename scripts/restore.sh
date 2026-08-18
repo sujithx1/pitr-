@@ -13,8 +13,10 @@ if ! docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
     fi
 fi
 
-# Auto-detect exact image name from running database container
-IMAGE_NAME=$(docker inspect -f '{{.Config.Image}}' "$CONTAINER_NAME" 2>/dev/null || echo "postgres:18")
+IMAGE_NAME=$(docker inspect -f '{{.Config.Image}}' "$CONTAINER_NAME" 2>/dev/null || true)
+if [ -z "$IMAGE_NAME" ]; then
+    IMAGE_NAME="postgres-18:latest"
+fi
 STANZA_NAME=${STANZA_NAME:-"db"}
 
 # Check if target timestamp is passed as an argument

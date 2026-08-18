@@ -105,24 +105,42 @@ app.get('/api/wal/logical', (c) => {
 // Trigger Point-in-Time Recovery
 app.post('/api/restore', async (c) => {
   try {
-    const { timestamp, lsn, targetDbUrl } = await c.req.json();
+    const { timestamp, lsn, restoreMode } = await c.req.json();
     const target = lsn || timestamp;
 
     if (!target) {
       return c.json({ error: "No target LSN or timestamp provided" }, 400);
     }
 
-    if (targetDbUrl) {
-      console.log(`Triggering Out-of-Place Fork Restore to LSN: ${target} -> ${targetDbUrl}`);
-      const output = execSync(`../scripts/restore_fork.sh "${target}" "${targetDbUrl}"`, { encoding: 'utf-8' });
-      return c.json({ success: true, log: output });
+    const scriptsDir = execSync('pwd', { encoding: 'utf-8' }).trim().replace(/\/dashboard$/, '/scripts');
+
+    if (restoreMode === 'inplace') {
+      const scriptPath = `${scriptsDir}/restore_inplace.sh`;
+
+
+      console.log(`[RECOVERY 1/2] Executing In-Place Restore: bash ${scriptPath} "${target}"`);
+
+
+      const output = execSync(`bash "${scriptPath}" "${target}"`, { cwd: scriptsDir, encoding: 'utf-8' });
+
+
+      console.log(`[RESTORE OUTPUT]:\n${output}`);
+
+      return c.json({ success: true, mode: 'inplace', log: output });
     } else {
-      console.log(`Triggering Physical Cluster Promotion Restore to LSN: ${target}`);
-      const output = execSync(`../scripts/restore_cluster_clone.sh "${target}"`, { encoding: 'utf-8' });
-      return c.json({ success: true, log: output });
+      const scriptPath = `${scriptsDir}/restore_cluster_clone.sh`;
+
+      console.log(`[RECOVERY 2/2] Executing Physical Cluster Promotion: bash ${scriptPath} "${target}"`);
+
+      const output = execSync(`bash "${scriptPath}" "${target}"`, { cwd: scriptsDir, encoding: 'utf-8' });
+
+      console.log(`[RESTORE OUTPUT]:\n${output}`);
+      return c.json({ success: true, mode: 'cluster', log: output });
     }
   } catch (err: any) {
-    return c.json({ success: false, error: err.message }, 500);
+    const logOutput = err.stdout || err.stderr || err.output?.join?.('\n') || err.message;
+    console.error(`[RESTORE LOG/ERROR]:\n${logOutput}`);
+    return c.json({ success: false, log: logOutput, error: err.message || String(err) }, 200);
   }
 });
 

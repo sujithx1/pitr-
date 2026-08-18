@@ -5,17 +5,22 @@
 
 set -e
 
-# Load environment variables if .env exists
-for env_file in ".env" "$(dirname "$0")/../../staging_server/.env" "$(dirname "$0")/../../dashboard/.env" "$(dirname "$0")/../../.env"; do
-    if [ -f "$env_file" ]; then
-        export $(grep -v '^#' "$env_file" | xargs 2>/dev/null) 2>/dev/null || true
-    fi
-done
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROD_DIR="$(dirname "$SCRIPT_DIR")"
 
-CONTAINER_NAME=${PG_CONTAINER_NAME:-"postgres_db_18"}
+# Load production environment variables
+if [ -f "$PROD_DIR/.env" ]; then
+    export $(grep -v '^#' "$PROD_DIR/.env" | xargs 2>/dev/null) 2>/dev/null || true
+fi
+
+CONTAINER_NAME=${PG_CONTAINER_NAME:-"postgres_pitr_prod"}
 if ! docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
-    if docker ps --format '{{.Names}}' | grep -q "^postgres_pitr_lab$"; then
+    if docker ps --format '{{.Names}}' | grep -q "^postgres_pitr_prod$"; then
+        CONTAINER_NAME="postgres_pitr_prod"
+    elif docker ps --format '{{.Names}}' | grep -q "^postgres_pitr_lab$"; then
         CONTAINER_NAME="postgres_pitr_lab"
+    elif docker ps --format '{{.Names}}' | grep -q "^postgres_db_18$"; then
+        CONTAINER_NAME="postgres_db_18"
     fi
 fi
 
@@ -37,8 +42,8 @@ echo "S3 Region:        $S3_REGION"
 echo "S3 Endpoint:      $S3_ENDPOINT"
 echo "=================================================="
 
-CONF_TEMPLATE="$(dirname "$0")/../postgres/pgbackrest_s3.conf.template"
-TARGET_CONF="$(dirname "$0")/../postgres/pgbackrest_s3.conf"
+CONF_TEMPLATE="$PROD_DIR/postgres/pgbackrest_s3.conf.template"
+TARGET_CONF="$PROD_DIR/postgres/pgbackrest_s3.conf"
 
 if [ ! -f "$CONF_TEMPLATE" ]; then
     echo "ERROR: Template file $CONF_TEMPLATE not found!"

@@ -31,6 +31,10 @@ echo "=================================================="
 TEMP_VOLUME="pitr_pgdata_temp"
 TEMP_CONTAINER="postgres_pitr_recovery_temp"
 
+# 0. Force flush active WAL segment into backup repository
+echo "[0/6] Flushing active WAL segment into backup repository..."
+docker exec -u postgres "$CONTAINER_NAME" psql -U "${PG_USER:-sujith}" -d "${PG_DB:-db}" -c "SELECT pg_switch_wal();" &>/dev/null || true
+
 # 1. Create temporary recovery volume
 echo "[1/6] Creating temporary recovery volume..."
 docker stop "$TEMP_CONTAINER" 2>/dev/null || true
