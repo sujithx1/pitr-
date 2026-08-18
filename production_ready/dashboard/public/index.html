@@ -388,19 +388,14 @@
       <p id="targetLsnDisplay" style="font-family: var(--font-code); color: var(--accent-cyan); margin-bottom: 1rem;"></p>
       
       <div style="text-align: left; margin-bottom: 1rem;">
-        <label style="display: block; margin-bottom: 0.5rem; cursor: pointer;">
-          <input type="radio" name="restoreMode" id="modeCluster" value="cluster" checked onchange="toggleRestoreFields()">
-          <strong>Physical Cluster Promotion</strong> (Sub-minute Zero Downtime)
+        <label style="display: block; margin-bottom: 0.75rem; cursor: pointer;">
+          <input type="radio" name="restoreMode" id="modeCluster" value="cluster" checked>
+          <strong>Promoted Cluster Clone (Port 5434)</strong> - Zero Downtime Test Clone
         </label>
         <label style="display: block; cursor: pointer;">
-          <input type="radio" name="restoreMode" id="modeFork" value="fork" onchange="toggleRestoreFields()">
-          <strong>Out-of-Place Fork Stream</strong> (Target DB URL)
+          <input type="radio" name="restoreMode" id="modeInplace" value="inplace">
+          <strong>In-Place Restore (Port 5433)</strong> - Overwrites Production Database Directly
         </label>
-      </div>
-
-      <div id="forkFields" style="display: none; text-align: left; margin-bottom: 1rem;">
-        <label style="font-size: 0.8rem; color: var(--text-muted); display: block; margin-bottom: 0.25rem;">Target Database URL:</label>
-        <input type="text" id="targetDbUrl" value="postgresql://dev:devpostgres@123@localhost:5432/mds" style="width: 100%; padding: 0.5rem; background: #000; border: 1px solid var(--border-color); color: #fff; font-family: var(--font-code); font-size: 0.8rem; border-radius: 6px;">
       </div>
 
       <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 1.5rem;">
@@ -516,27 +511,21 @@
       document.getElementById('restoreModal').style.display = 'none';
     }
 
-    function toggleRestoreFields() {
-      const isFork = document.getElementById('modeFork').checked;
-      document.getElementById('forkFields').style.display = isFork ? 'block' : 'none';
-    }
-
     async function triggerRestore() {
-      const isFork = document.getElementById('modeFork').checked;
-      const targetDbUrl = isFork ? document.getElementById('targetDbUrl').value.trim() : null;
+      const restoreMode = document.querySelector('input[name="restoreMode"]:checked').value;
 
       try {
         document.getElementById('confirmRestoreBtn').textContent = 'Restoring...';
         const res = await fetch('/api/restore', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ lsn: selectedLsn, targetDbUrl })
+          body: JSON.stringify({ lsn: selectedLsn, restoreMode })
         });
         const data = await res.json();
         if (data.success) {
-          alert('Restore completed successfully!');
+          alert(`Restore Completed Successfully (${data.mode || restoreMode})!\n\n${data.log}`);
         } else {
-          alert('Restore failed: ' + data.error);
+          alert(`Restore Failed:\n\n${data.log || data.error}`);
         }
       } catch (err) {
         alert('Connection error during restore.');
