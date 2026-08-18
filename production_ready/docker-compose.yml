@@ -3,7 +3,7 @@ version: "3.9"
 services:
   postgres_prod:
     build: ./postgres
-    image: postgres_pitr_prod:latest
+    image: postgres-18:latest
     container_name: postgres_pitr_prod
     restart: always
     environment:
@@ -13,7 +13,7 @@ services:
       TZ: Asia/Kolkata
       PGDATA: /var/lib/postgresql/18/docker
     ports:
-      - "${PG_PORT:-5432}:5432"
+      - "${PG_PORT:-5433}:5432"
     volumes:
       - ./postgres_data:/var/lib/postgresql/18/docker
       - ./postgres/postgresql.conf:/etc/postgresql/postgresql.conf

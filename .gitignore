@@ -1,4 +1,4 @@
-# Ignore database backups
+# Ignore database backups & archives
 backups/base/*
 !backups/base/.gitkeep
 backups/wal/*
@@ -7,14 +7,30 @@ backups/archive/*
 !backups/archive/.gitkeep
 backups/backup/*
 !backups/backup/.gitkeep
-node_modules
+postgres_data/
+postgres_data_fork/
+
+# Production ready ignores
+production_ready/postgres_data/
+production_ready/backups/
+production_ready/postgres/pgbackrest_s3.conf
+production_ready/.env
+
+# Dependencies & Build output
+node_modules/
+bun.lockb
+dist/
+
+# Environment variables & secrets
+.env
+.env.local
 
 # Ignore runtime logs and lock files
 *.log
 *.pid
+scripts/cron.log
+production_ready/scripts/cron.log
 
 # OS generated files
 .DS_Store
 Thumbs.db
-
-.env

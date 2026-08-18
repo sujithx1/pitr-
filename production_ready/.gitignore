@@ -1,0 +1,30 @@
+# Environment variables
+.env
+.env.local
+.env.production
+
+# Postgres Data Directories
+postgres_data/
+postgres_data_fork/
+
+# Backups and Repositories
+backups/
+backups/archive/*
+!backups/archive/.gitkeep
+backups/backup/*
+!backups/backup/.gitkeep
+postgres/pgbackrest_s3.conf
+
+# Logs & Runtime files
+*.log
+*.pid
+scripts/cron.log
+
+# Node & Bun Dependencies
+node_modules/
+bun.lockb
+dist/
+
+# OS Files
+.DS_Store
+Thumbs.db

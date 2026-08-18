@@ -13,7 +13,7 @@ echo "Executing Backup Pipeline with Automated Alerting"
 echo "Backup Type: $BACKUP_TYPE"
 echo "=================================================="
 
-if "$SCRIPT_DIR/../../scripts/backup.sh" "$BACKUP_TYPE"; then
+if "$SCRIPT_DIR/backup.sh" "$BACKUP_TYPE"; then
     echo "[ALERT] Backup pipeline succeeded."
     "$SCRIPT_DIR/alert.sh" "success" "Backup Succeeded" "pgBackRest $BACKUP_TYPE backup completed successfully."
 else
