@@ -1,0 +1,31 @@
+version: "3.9"
+
+services:
+  postgres_prod:
+    build: ./postgres
+    image: postgres_pitr_prod:latest
+    container_name: postgres_pitr_prod
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-dev}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-devpostgres@123}
+      POSTGRES_DB: ${POSTGRES_DB:-mds}
+      TZ: Asia/Kolkata
+      PGDATA: /var/lib/postgresql/18/docker
+    ports:
+      - "${PG_PORT:-5432}:5432"
+    volumes:
+      - ./postgres_data:/var/lib/postgresql/18/docker
+      - ./postgres/postgresql.conf:/etc/postgresql/postgresql.conf
+      - ./postgres/pg_hba.conf:/etc/postgresql/pg_hba.conf
+      - ./postgres/pgbackrest.conf:/etc/pgbackrest/pgbackrest.conf
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./backups:/backups
+    command:
+      [
+        "postgres",
+        "-c",
+        "config_file=/etc/postgresql/postgresql.conf",
+        "-c",
+        "hba_file=/etc/postgresql/pg_hba.conf"
+      ]

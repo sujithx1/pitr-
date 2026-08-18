@@ -7,7 +7,7 @@ services:
       POSTGRES_USER: sujith
       POSTGRES_PASSWORD: sujith
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - ./postgres/postgresql.conf:/etc/postgresql/postgresql.conf
       - ./postgres/pg_hba.conf:/etc/postgresql/pg_hba.conf

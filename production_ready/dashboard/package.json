@@ -2,6 +2,8 @@
   "name": "pitr-production-dashboard",
   "version": "1.0.0",
   "scripts": {
+    "dev": "bun run --watch logical_streamer.ts",
+    "start": "bun run logical_streamer.ts",
     "logical": "bun run logical_streamer.ts"
   },
   "dependencies": {
