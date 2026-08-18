@@ -26,6 +26,12 @@ if ! docker exec -u postgres -i "$CONTAINER_NAME" test -f "/backups/backup/$STAN
     echo "[0/2] Initializing pgBackRest stanza '$STANZA_NAME'..."
     docker exec -u root -i "$CONTAINER_NAME" chown -R postgres:postgres /backups 2>/dev/null || true
     docker exec -u postgres -i "$CONTAINER_NAME" pgbackrest --stanza="$STANZA_NAME" stanza-create
+else
+    # Check if database system-id has changed (e.g. fresh initdb) and run stanza-upgrade if needed
+    if ! docker exec -u postgres -i "$CONTAINER_NAME" pgbackrest --stanza="$STANZA_NAME" check &>/dev/null; then
+        echo "[0/2] Database system-id changed or stanza check failed. Upgrading stanza..."
+        docker exec -u postgres -i "$CONTAINER_NAME" pgbackrest --stanza="$STANZA_NAME" stanza-upgrade || true
+    fi
 fi
 
 # Determine backup type from argument (default to 'incr')
