@@ -9,29 +9,13 @@ import { execSync } from 'child_process';
 
 const app = new Hono();
 
-let PG_USER = process.env.PG_USER || 'sujith';
-let PG_DB = process.env.PG_DB || 'db';
-
-function getDbParams(): { container: string; user: string; db: string } {
-  try {
-    const check0 = execSync(`docker exec postgres_pitr_prod pg_isready -U ${PG_USER} -d ${PG_DB}`, { stdio: 'pipe' }).toString();
-    if (check0.includes('accepting connections')) return { container: 'postgres_pitr_prod', user: PG_USER, db: PG_DB };
-  } catch {}
-  try {
-    const check1 = execSync(`docker exec postgres_pitr_lab pg_isready -U ${PG_USER} -d ${PG_DB}`, { stdio: 'pipe' }).toString();
-    if (check1.includes('accepting connections')) return { container: 'postgres_pitr_lab', user: PG_USER, db: PG_DB };
-  } catch {}
-  try {
-    const check2 = execSync(`docker exec postgres_db_18 pg_isready -U dev -d mds`, { stdio: 'pipe' }).toString();
-    if (check2.includes('accepting connections')) return { container: 'postgres_db_18', user: 'dev', db: 'mds' };
-  } catch {}
-  return { container: process.env.PG_CONTAINER_NAME || 'postgres_pitr_prod', user: PG_USER, db: PG_DB };
-}
+const PG_CONTAINER = process.env.PG_CONTAINER_NAME || 'postgres_pitr_prod';
+const PG_USER = process.env.PG_USER || process.env.POSTGRES_USER || 'dev';
+const PG_DB = process.env.PG_DB || process.env.POSTGRES_DB || 'mds';
 
 function runSql(sql: string): string {
   try {
-    const p = getDbParams();
-    const cmd = `docker exec ${p.container} psql -U ${p.user} -d ${p.db} -t -A -P pager=off -c "${sql}"`;
+    const cmd = `docker exec ${PG_CONTAINER} psql -U ${PG_USER} -d ${PG_DB} -t -A -P pager=off -c "${sql}"`;
     return execSync(cmd, { encoding: 'utf-8', stdio: 'pipe' }).trim();
   } catch (err: any) {
     return '';
