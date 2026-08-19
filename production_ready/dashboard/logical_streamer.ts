@@ -18,7 +18,9 @@ function runSql(sql: string): string {
     const cmd = `docker exec ${PG_CONTAINER} psql -U ${PG_USER} -d ${PG_DB} -t -A -P pager=off -c "${sql}"`;
     return execSync(cmd, { encoding: 'utf-8', stdio: 'pipe' }).trim();
   } catch (err: any) {
-    return '';
+    const stderr = err.stderr ? err.stderr.toString().trim() : err.message;
+    console.error(`[LOGICAL STREAMER ERROR] Command failed on ${PG_CONTAINER}: ${stderr}`);
+    throw new Error(`Failed on container '${PG_CONTAINER}': ${stderr}`);
   }
 }
 
@@ -28,10 +30,20 @@ app.use('/*', serveStatic({ root: './public' }));
 // Ensure logical replication slot exists
 app.post('/api/logical/init', (c) => {
   try {
-    const checkSlot = runSql("SELECT slot_name FROM pg_replication_slots WHERE slot_name = 'pitr_logical_slot';");
+    let checkSlot = '';
+    try {
+      checkSlot = runSql("SELECT slot_name FROM pg_replication_slots WHERE slot_name = 'pitr_logical_slot';");
+    } catch (e: any) {
+      return c.json({ success: false, error: e.message }, 500);
+    }
+
     if (!checkSlot) {
-      runSql("SELECT pg_create_logical_replication_slot('pitr_logical_slot', 'test_decoding');");
-      return c.json({ success: true, message: "Logical replication slot 'pitr_logical_slot' created successfully." });
+      try {
+        runSql("SELECT pg_create_logical_replication_slot('pitr_logical_slot', 'test_decoding');");
+        return c.json({ success: true, message: "Logical replication slot 'pitr_logical_slot' created successfully." });
+      } catch (e: any) {
+        return c.json({ success: false, error: e.message }, 500);
+      }
     }
     return c.json({ success: true, message: "Replication slot already exists." });
   } catch (err: any) {
@@ -47,7 +59,7 @@ function ensureSlotExists() {
       console.log("[LOGICAL STREAMER] Auto-creating missing replication slot 'pitr_logical_slot'...");
       runSql("SELECT pg_create_logical_replication_slot('pitr_logical_slot', 'test_decoding');");
     }
-  } catch (e) {}
+  } catch (e) { }
 }
 
 // Peek at recent logical decoding JSON events with Pagination & Date Filtering
@@ -62,7 +74,7 @@ app.get('/api/wal/logical', (c) => {
 
     const sql = "SELECT lsn, data FROM pg_logical_slot_peek_changes('pitr_logical_slot', NULL, 500);";
     let rawOutput = runSql(sql);
-    
+
     if (!rawOutput) {
       return c.json({ events: [], total: 0, page, limit, totalPages: 0, notice: "No active unread changes in logical slot." });
     }
