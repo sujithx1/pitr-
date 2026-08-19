@@ -39,19 +39,32 @@ app.post('/api/logical/init', (c) => {
   }
 });
 
+function ensureSlotExists() {
+  try {
+    const checkSql = "SELECT slot_name FROM pg_replication_slots WHERE slot_name = 'pitr_logical_slot';";
+    const exists = runSql(checkSql);
+    if (!exists) {
+      console.log("[LOGICAL STREAMER] Auto-creating missing replication slot 'pitr_logical_slot'...");
+      runSql("SELECT pg_create_logical_replication_slot('pitr_logical_slot', 'test_decoding');");
+    }
+  } catch (e) {}
+}
+
 // Peek at recent logical decoding JSON events with Pagination & Date Filtering
 app.get('/api/wal/logical', (c) => {
   try {
+    ensureSlotExists();
+
     const startDate = c.req.query('start_date');
     const endDate = c.req.query('end_date');
     const page = parseInt(c.req.query('page') || '1', 10);
     const limit = parseInt(c.req.query('limit') || '15', 10);
 
     const sql = "SELECT lsn, data FROM pg_logical_slot_peek_changes('pitr_logical_slot', NULL, 500);";
-    const rawOutput = runSql(sql);
+    let rawOutput = runSql(sql);
     
     if (!rawOutput) {
-      return c.json({ events: [], total: 0, page, limit, totalPages: 0, notice: "No active unread changes in logical slot or slot not initialized." });
+      return c.json({ events: [], total: 0, page, limit, totalPages: 0, notice: "No active unread changes in logical slot." });
     }
 
     const lines = rawOutput.split('\n');

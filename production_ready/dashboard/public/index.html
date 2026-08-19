@@ -3,24 +3,45 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PostgreSQL Logical Decoding Real-Time Streamer</title>
+  <title>PostgreSQL Logical Streaming Dashboard</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg-dark: #0a0c10;
-      --panel-bg: rgba(18, 22, 31, 0.75);
-      --border-color: rgba(255, 255, 255, 0.08);
-      --accent-cyan: #00f2fe;
-      --accent-purple: #4facfe;
-      --accent-green: #00e676;
-      --accent-orange: #ff9100;
-      --accent-red: #ff5252;
-      --text-main: #f0f4f8;
-      --text-muted: #8a99ad;
-      --font-main: 'Outfit', sans-serif;
+      --bg-body: #f8fafc;
+      --bg-card: #ffffff;
+      --border-color: #e2e8f0;
+      --border-hover: #cbd5e1;
+      
+      --primary: #4f46e5;
+      --primary-hover: #4338ca;
+      --primary-light: #eef2ff;
+
+      --op-insert-bg: #dcfce7;
+      --op-insert-border: #86efac;
+      --op-insert-text: #15803d;
+
+      --op-update-bg: #fef3c7;
+      --op-update-border: #fde047;
+      --op-update-text: #b45309;
+
+      --op-delete-bg: #fee2e2;
+      --op-delete-border: #fca5a5;
+      --op-delete-text: #b91c1c;
+
+      --op-tx-bg: #e0f2fe;
+      --op-tx-border: #7dd3fc;
+      --op-tx-text: #0369a1;
+
+      --text-dark: #0f172a;
+      --text-muted: #64748b;
+      
+      --font-main: 'Inter', sans-serif;
       --font-code: 'Fira Code', monospace;
+      --shadow-sm: 0 1px 3px rgba(0,0,0,0.05);
+      --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.07), 0 2px 4px -1px rgba(0,0,0,0.04);
+      --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.08), 0 4px 6px -2px rgba(0,0,0,0.04);
     }
 
     * {
@@ -30,206 +51,264 @@
     }
 
     body {
-      background: var(--bg-dark);
-      color: var(--text-main);
+      background: var(--bg-body);
+      color: var(--text-dark);
       font-family: var(--font-main);
       min-height: 100vh;
-      background-image: 
-        radial-gradient(circle at 15% 15%, rgba(0, 242, 254, 0.05) 0%, transparent 40%),
-        radial-gradient(circle at 85% 85%, rgba(79, 172, 254, 0.05) 0%, transparent 40%);
-      padding: 2rem;
+      padding: 2rem 1.5rem;
     }
 
     .container {
-      max-width: 1200px;
+      max-width: 1240px;
       margin: 0 auto;
     }
 
+    /* Clean Light Navigation Header */
     header {
       display: flex;
       justify-content: space-between;
       align-items: center;
       margin-bottom: 2rem;
-      padding-bottom: 1rem;
-      border-bottom: 1px solid var(--border-color);
+      padding: 1.2rem 1.6rem;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      box-shadow: var(--shadow-sm);
+      flex-wrap: wrap;
+      gap: 1rem;
     }
 
-    .logo-area {
+    .brand-area {
       display: flex;
       align-items: center;
       gap: 1rem;
     }
 
-    .badge-icon {
-      background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));
-      color: #000;
-      font-weight: 700;
-      width: 45px;
-      height: 45px;
+    .brand-icon {
+      background: var(--primary-light);
+      color: var(--primary);
+      width: 44px;
+      height: 44px;
       border-radius: 12px;
       display: flex;
       align-items: center;
       justify-content: center;
       font-size: 1.4rem;
-      box-shadow: 0 0 20px rgba(0, 242, 254, 0.3);
+      border: 1px solid #c7d2fe;
     }
 
-    h1 {
-      font-size: 1.6rem;
-      font-weight: 600;
-      letter-spacing: -0.5px;
+    .title-group h1 {
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: var(--text-dark);
+      letter-spacing: -0.3px;
     }
 
-    .sub-title {
+    .title-group .sub {
       font-size: 0.85rem;
       color: var(--text-muted);
+      margin-top: 0.15rem;
     }
 
     .status-pill {
       display: flex;
       align-items: center;
       gap: 0.5rem;
-      background: rgba(0, 230, 118, 0.1);
-      border: 1px solid rgba(0, 230, 118, 0.3);
-      color: var(--accent-green);
-      padding: 0.4rem 1rem;
-      border-radius: 20px;
+      background: var(--op-insert-bg);
+      border: 1px solid var(--op-insert-border);
+      color: var(--op-insert-text);
+      padding: 0.45rem 1.1rem;
+      border-radius: 30px;
       font-size: 0.85rem;
-      font-weight: 500;
+      font-weight: 600;
     }
 
     .pulse-dot {
       width: 8px;
       height: 8px;
-      background: var(--accent-green);
+      background: var(--op-insert-text);
       border-radius: 50%;
-      box-shadow: 0 0 8px var(--accent-green);
-      animation: pulse 1.5s infinite;
+      animation: pulse 1.8s infinite ease-in-out;
     }
 
     @keyframes pulse {
-      0% { opacity: 0.4; }
-      50% { opacity: 1; }
-      100% { opacity: 0.4; }
+      0% { opacity: 0.4; transform: scale(0.9); }
+      50% { opacity: 1; transform: scale(1.1); }
+      100% { opacity: 0.4; transform: scale(0.9); }
     }
 
+    /* Metric Cards Grid */
     .metrics-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-      gap: 1.5rem;
-      margin-bottom: 2rem;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1.2rem;
+      margin-bottom: 1.8rem;
     }
 
     .card {
-      background: var(--panel-bg);
-      backdrop-filter: blur(12px);
+      background: var(--bg-card);
       border: 1px solid var(--border-color);
-      border-radius: 16px;
-      padding: 1.5rem;
-      transition: transform 0.2s ease, border-color 0.2s ease;
+      border-radius: 14px;
+      padding: 1.3rem;
+      box-shadow: var(--shadow-sm);
+      transition: all 0.2s ease;
     }
 
     .card:hover {
       transform: translateY(-2px);
-      border-color: rgba(255, 255, 255, 0.2);
+      box-shadow: var(--shadow-md);
+      border-color: var(--border-hover);
     }
 
     .card-label {
-      font-size: 0.8rem;
+      font-size: 0.78rem;
       text-transform: uppercase;
       letter-spacing: 1px;
       color: var(--text-muted);
       margin-bottom: 0.5rem;
+      font-weight: 600;
     }
 
     .card-value {
       font-size: 1.8rem;
-      font-weight: 700;
-      color: #fff;
+      font-weight: 800;
+      color: var(--text-dark);
     }
 
-    .controls-bar {
+    /* Toolbar & Filter Options */
+    .toolbar {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 14px;
+      padding: 1.1rem 1.4rem;
+      margin-bottom: 1.5rem;
       display: flex;
       justify-content: space-between;
       align-items: center;
-      background: var(--panel-bg);
-      backdrop-filter: blur(12px);
-      border: 1px solid var(--border-color);
-      border-radius: 12px;
-      padding: 1rem 1.5rem;
-      margin-bottom: 1.5rem;
       flex-wrap: wrap;
-      gap: 1rem;
+      gap: 1.2rem;
+      box-shadow: var(--shadow-sm);
     }
 
-    .btn {
-      background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));
-      color: #040914;
-      border: none;
-      padding: 0.6rem 1.4rem;
-      border-radius: 8px;
-      font-weight: 600;
-      cursor: pointer;
-      font-family: var(--font-main);
-      transition: opacity 0.2s ease, transform 0.1s ease;
+    .filter-group {
+      display: flex;
+      gap: 0.4rem;
+      align-items: center;
+      flex-wrap: wrap;
     }
 
-    .btn:hover {
-      opacity: 0.9;
-      transform: scale(1.02);
-    }
-
-    .btn-outline {
-      background: transparent;
+    .pill-btn {
+      background: #f1f5f9;
       border: 1px solid var(--border-color);
-      color: var(--text-main);
-      padding: 0.4rem 0.8rem;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 0.85rem;
-    }
-
-    .btn-outline:hover {
-      border-color: var(--accent-cyan);
-      color: var(--accent-cyan);
-    }
-
-    .btn-restore {
-      background: rgba(0, 242, 254, 0.15);
-      border: 1px solid rgba(0, 242, 254, 0.3);
-      color: var(--accent-cyan);
-      padding: 0.3rem 0.8rem;
-      border-radius: 6px;
-      font-size: 0.8rem;
+      color: var(--text-muted);
+      padding: 0.4rem 0.9rem;
+      border-radius: 20px;
+      font-size: 0.82rem;
       font-weight: 600;
       cursor: pointer;
       transition: all 0.2s ease;
     }
 
+    .pill-btn:hover {
+      background: #e2e8f0;
+      color: var(--text-dark);
+    }
+
+    .pill-btn.active {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: #ffffff;
+    }
+
+    .pill-btn.active.insert { background: var(--op-insert-text); border-color: var(--op-insert-text); color: #ffffff; }
+    .pill-btn.active.update { background: var(--op-update-text); border-color: var(--op-update-text); color: #ffffff; }
+    .pill-btn.active.delete { background: var(--op-delete-text); border-color: var(--op-delete-text); color: #ffffff; }
+
+    .date-input {
+      background: #ffffff;
+      border: 1px solid var(--border-color);
+      color: var(--text-dark);
+      padding: 0.4rem 0.6rem;
+      border-radius: 8px;
+      font-family: var(--font-main);
+      font-size: 0.82rem;
+    }
+
+    .date-input:focus {
+      outline: none;
+      border-color: var(--primary);
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: #ffffff;
+      border: none;
+      padding: 0.6rem 1.3rem;
+      border-radius: 10px;
+      font-weight: 600;
+      font-size: 0.88rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .btn-primary:hover {
+      background: var(--primary-hover);
+      transform: translateY(-1px);
+      box-shadow: var(--shadow-md);
+    }
+
+    .btn-secondary {
+      background: #ffffff;
+      border: 1px solid var(--border-color);
+      color: var(--text-dark);
+      padding: 0.45rem 0.9rem;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 0.82rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .btn-secondary:hover {
+      background: #f1f5f9;
+      border-color: var(--border-hover);
+    }
+
+    .btn-restore {
+      background: var(--primary-light);
+      border: 1px solid #c7d2fe;
+      color: var(--primary);
+      padding: 0.35rem 0.85rem;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
     .btn-restore:hover {
-      background: var(--accent-cyan);
-      color: #000;
+      background: var(--primary);
+      color: #ffffff;
+      border-color: var(--primary);
     }
 
     .pagination-bar {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      background: var(--panel-bg);
+      background: var(--bg-card);
       border: 1px solid var(--border-color);
       border-radius: 12px;
       padding: 0.8rem 1.2rem;
       margin-bottom: 1.5rem;
       font-size: 0.85rem;
+      box-shadow: var(--shadow-sm);
+      flex-wrap: wrap;
+      gap: 0.8rem;
     }
 
-    .feed-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 1rem;
-    }
-
+    /* Event Cards Feed Stream */
     .feed-container {
       display: flex;
       flex-direction: column;
@@ -237,55 +316,85 @@
     }
 
     .event-card {
-      background: var(--panel-bg);
+      background: var(--bg-card);
       border: 1px solid var(--border-color);
-      border-radius: 12px;
-      padding: 1.2rem;
+      border-radius: 14px;
+      padding: 1.3rem;
       display: flex;
       flex-direction: column;
-      gap: 0.8rem;
-      animation: fadeIn 0.3s ease;
+      gap: 0.85rem;
+      box-shadow: var(--shadow-sm);
+      transition: all 0.2s ease;
     }
 
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(10px); }
-      to { opacity: 1; transform: translateY(0); }
+    .event-card:hover {
+      border-color: var(--border-hover);
+      box-shadow: var(--shadow-md);
     }
 
-    .event-top {
+    .event-card.op-insert { border-left: 5px solid var(--op-insert-text); }
+    .event-card.op-update { border-left: 5px solid var(--op-update-text); }
+    .event-card.op-delete { border-left: 5px solid var(--op-delete-text); }
+    .event-card.op-tx { border-left: 5px solid var(--op-tx-text); }
+
+    .event-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
+      flex-wrap: wrap;
+      gap: 0.6rem;
     }
 
-    .lsn-badge {
+    .badge-op {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.25rem 0.75rem;
+      border-radius: 20px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .badge-op.insert { background: var(--op-insert-bg); border: 1px solid var(--op-insert-border); color: var(--op-insert-text); }
+    .badge-op.update { background: var(--op-update-bg); border: 1px solid var(--op-update-border); color: var(--op-update-text); }
+    .badge-op.delete { background: var(--op-delete-bg); border: 1px solid var(--op-delete-border); color: var(--op-delete-text); }
+    .badge-op.tx { background: var(--op-tx-bg); border: 1px solid var(--op-tx-border); color: var(--op-tx-text); }
+
+    .lsn-pill {
       font-family: var(--font-code);
-      background: rgba(255, 255, 255, 0.05);
+      background: #f1f5f9;
       border: 1px solid var(--border-color);
-      padding: 0.2rem 0.6rem;
+      padding: 0.25rem 0.65rem;
       border-radius: 6px;
-      font-size: 0.85rem;
-      color: var(--accent-cyan);
+      font-size: 0.82rem;
+      color: var(--text-dark);
+      font-weight: 600;
     }
 
-    .event-data {
+    .event-body {
       font-family: var(--font-code);
-      font-size: 0.9rem;
-      background: #06080d;
-      padding: 0.8rem 1rem;
-      border-radius: 8px;
-      color: #e2e8f0;
+      font-size: 0.88rem;
+      background: #f8fafc;
+      padding: 1rem 1.2rem;
+      border-radius: 10px;
+      color: #1e293b;
       overflow-x: auto;
-      border-left: 3px solid var(--accent-purple);
+      line-height: 1.5;
+      border: 1px solid var(--border-color);
     }
+
+    .highlight-table { color: #d97706; font-weight: 700; }
+    .highlight-kw { color: #2563eb; font-weight: 700; }
 
     .empty-feed {
       text-align: center;
-      padding: 3rem;
+      padding: 3.5rem 1.5rem;
       color: var(--text-muted);
-      background: var(--panel-bg);
+      background: var(--bg-card);
       border: 1px dashed var(--border-color);
-      border-radius: 12px;
+      border-radius: 14px;
+      font-size: 0.95rem;
     }
 
     /* Modal Styling */
@@ -293,31 +402,49 @@
       display: none;
       position: fixed;
       top: 0; left: 0; right: 0; bottom: 0;
-      background: rgba(0,0,0,0.8);
-      backdrop-filter: blur(8px);
+      background: rgba(15, 23, 42, 0.6);
+      backdrop-filter: blur(6px);
       z-index: 1000;
       align-items: center;
       justify-content: center;
     }
 
     .modal-content {
-      background: #0d1117;
+      background: #ffffff;
       border: 1px solid var(--border-color);
-      border-radius: 16px;
+      border-radius: 18px;
       padding: 2rem;
-      max-width: 480px;
+      max-width: 500px;
       width: 90%;
+      box-shadow: var(--shadow-lg);
+    }
+
+    .radio-card {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.8rem;
+      cursor: pointer;
+      background: #f8fafc;
+      padding: 1rem;
+      border-radius: 12px;
+      border: 1px solid var(--border-color);
+      transition: all 0.2s ease;
+    }
+
+    .radio-card:hover {
+      border-color: var(--primary);
+      background: var(--primary-light);
     }
   </style>
 </head>
 <body>
   <div class="container">
     <header>
-      <div class="logo-area">
-        <div class="badge-icon">⚡</div>
-        <div>
-          <h1>Logical Decoding Streamer</h1>
-          <div class="sub-title">PostgreSQL Real-Time JSON Replication Plugin (wal2json / test_decoding)</div>
+      <div class="brand-area">
+        <div class="brand-icon" style="font-weight: 700; font-size: 1.1rem; letter-spacing: -0.5px;">DB</div>
+        <div class="title-group">
+          <h1>Logical Streaming Dashboard</h1>
+          <div class="sub">PostgreSQL Real-Time WAL Replication & Point-in-Time Recovery Engine</div>
         </div>
       </div>
       <div class="status-pill">
@@ -326,39 +453,52 @@
       </div>
     </header>
 
+    <!-- Stat Cards -->
     <div class="metrics-grid">
       <div class="card">
-        <div class="card-label">Replication Slot</div>
-        <div class="card-value" style="font-size: 1.3rem; color: var(--accent-cyan);">pitr_logical_slot</div>
-      </div>
-      <div class="card">
-        <div class="card-label">Total Changes Decoded</div>
+        <div class="card-label">Total Decoded Changes</div>
         <div class="card-value" id="totalCount">0</div>
       </div>
       <div class="card">
-        <div class="card-label">Server Port</div>
-        <div class="card-value" style="color: var(--accent-purple);">4001</div>
+        <div class="card-label">Inserts</div>
+        <div class="card-value" id="insertCount" style="color: var(--op-insert-text);">0</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Updates</div>
+        <div class="card-value" id="updateCount" style="color: var(--op-update-text);">0</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Deletes</div>
+        <div class="card-value" id="deleteCount" style="color: var(--op-delete-text);">0</div>
       </div>
     </div>
 
-    <!-- Date Filter & Controls -->
-    <div class="controls-bar">
-      <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
-        <label style="font-size: 0.85rem; color: var(--text-muted);">Start Date:</label>
-        <input type="datetime-local" id="start-date" style="background: #06080d; border: 1px solid var(--border-color); color: #fff; padding: 0.4rem; border-radius: 6px;">
-        <label style="font-size: 0.85rem; color: var(--text-muted);">End Date:</label>
-        <input type="datetime-local" id="end-date" style="background: #06080d; border: 1px solid var(--border-color); color: #fff; padding: 0.4rem; border-radius: 6px;">
-        <button class="btn-outline" onclick="applyFilter()">Filter</button>
-        <button class="btn-outline" onclick="clearFilter()">Clear</button>
+    <!-- Toolbar Filters -->
+    <div class="toolbar">
+      <div class="filter-group">
+        <span class="filter-label">Filter:</span>
+        <button class="pill-btn active" onclick="setOpFilter('ALL', this)">All</button>
+        <button class="pill-btn" onclick="setOpFilter('INSERT', this)">INSERT</button>
+        <button class="pill-btn" onclick="setOpFilter('UPDATE', this)">UPDATE</button>
+        <button class="pill-btn" onclick="setOpFilter('DELETE', this)">DELETE</button>
       </div>
-      <button class="btn" id="initBtn">Init Replication Slot</button>
+
+      <div style="display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap;">
+        <label style="font-size: 0.82rem; color: var(--text-muted); font-weight: 600;">Start:</label>
+        <input type="datetime-local" id="start-date" class="date-input">
+        <label style="font-size: 0.82rem; color: var(--text-muted); font-weight: 600;">End:</label>
+        <input type="datetime-local" id="end-date" class="date-input">
+        <button class="btn-secondary" onclick="applyFilter()">Filter Date</button>
+        <button class="btn-secondary" onclick="clearFilter()">Clear</button>
+        <button class="btn-primary" id="initBtn">Init Replication Slot</button>
+      </div>
     </div>
 
-    <!-- Pagination Bar -->
+    <!-- Pagination Controls -->
     <div class="pagination-bar">
       <div style="display: flex; gap: 0.5rem; align-items: center;">
         <span style="color: var(--text-muted);">Items per page:</span>
-        <select id="limit-select" onchange="changeLimit()" style="background: #06080d; border: 1px solid var(--border-color); color: #fff; padding: 0.3rem 0.6rem; border-radius: 6px;">
+        <select id="limit-select" onchange="changeLimit()" style="background: #ffffff; border: 1px solid var(--border-color); color: var(--text-dark); padding: 0.35rem 0.65rem; border-radius: 8px;">
           <option value="10">10</option>
           <option value="15" selected>15</option>
           <option value="25">25</option>
@@ -366,16 +506,13 @@
         </select>
       </div>
       <div style="display: flex; gap: 1rem; align-items: center;">
-        <button id="btn-prev" class="btn-outline" onclick="prevPage()" disabled>&laquo; Prev</button>
-        <span id="pageInfo" style="font-family: var(--font-code); color: var(--accent-cyan);">Page 1 of 1 (0 events)</span>
-        <button id="btn-next" class="btn-outline" onclick="nextPage()" disabled>Next &raquo;</button>
+        <button id="btn-prev" class="btn-secondary" onclick="prevPage()" disabled>&laquo; Prev</button>
+        <span id="pageInfo" style="font-family: var(--font-code); color: var(--primary); font-weight: 600;">Page 1 of 1 (0 events)</span>
+        <button id="btn-next" class="btn-secondary" onclick="nextPage()" disabled>Next &raquo;</button>
       </div>
     </div>
 
-    <div class="feed-header">
-      <h2 style="font-size: 1.2rem; font-weight: 600;">Live Decoded Transactions</h2>
-    </div>
-
+    <!-- Feed Container -->
     <div class="feed-container" id="feed">
       <div class="empty-feed">Listening for unread logical decoding changes...</div>
     </div>
@@ -384,23 +521,30 @@
   <!-- Restore Modal -->
   <div id="restoreModal" class="modal">
     <div class="modal-content">
-      <h3 style="margin-bottom: 0.5rem;">Point-in-Time Recovery</h3>
-      <p id="targetLsnDisplay" style="font-family: var(--font-code); color: var(--accent-cyan); margin-bottom: 1rem;"></p>
+      <h3 style="margin-bottom: 0.5rem; font-size: 1.3rem; font-weight: 700; color: var(--text-dark);">Point-in-Time Recovery</h3>
+      <p id="targetLsnDisplay" style="font-family: var(--font-code); color: var(--primary); margin-bottom: 1.3rem; font-weight: 600;"></p>
       
-      <div style="text-align: left; margin-bottom: 1rem;">
-        <label style="display: block; margin-bottom: 0.75rem; cursor: pointer;">
-          <input type="radio" name="restoreMode" id="modeCluster" value="cluster" checked>
-          <strong>Promoted Cluster Clone (Port 5434)</strong> - Zero Downtime Test Clone
+      <div style="display: flex; flex-direction: column; gap: 0.8rem; margin-bottom: 1.5rem;">
+        <label class="radio-card">
+          <input type="radio" name="restoreMode" id="modeCluster" value="cluster" checked style="margin-top: 0.2rem;">
+          <div>
+            <strong style="color: var(--text-dark); font-size: 0.92rem;">Promoted Cluster Clone (Port 5434)</strong>
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.15rem;">Boots standalone database clone on Port 5434 (Zero Downtime).</div>
+          </div>
         </label>
-        <label style="display: block; cursor: pointer;">
-          <input type="radio" name="restoreMode" id="modeInplace" value="inplace">
-          <strong>In-Place Restore (Port 5433)</strong> - Overwrites Production Database Directly
+
+        <label class="radio-card">
+          <input type="radio" name="restoreMode" id="modeInplace" value="inplace" style="margin-top: 0.2rem;">
+          <div>
+            <strong style="color: var(--text-dark); font-size: 0.92rem;">In-Place Restore (Port 5433)</strong>
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.15rem;">Overwrites production database directly in-place.</div>
+          </div>
         </label>
       </div>
 
-      <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 1.5rem;">
-        <button class="btn-outline" onclick="closeRestoreModal()">Cancel</button>
-        <button class="btn" id="confirmRestoreBtn">Confirm Restore</button>
+      <div style="display: flex; gap: 0.8rem; justify-content: flex-end;">
+        <button class="btn-secondary" onclick="closeRestoreModal()">Cancel</button>
+        <button class="btn-primary" id="confirmRestoreBtn" onclick="triggerRestore()">Confirm Restore</button>
       </div>
     </div>
   </div>
@@ -408,6 +552,9 @@
   <script>
     const feed = document.getElementById('feed');
     const totalCount = document.getElementById('totalCount');
+    const insertCount = document.getElementById('insertCount');
+    const updateCount = document.getElementById('updateCount');
+    const deleteCount = document.getElementById('deleteCount');
     const initBtn = document.getElementById('initBtn');
     const pageInfo = document.getElementById('pageInfo');
     const btnPrev = document.getElementById('btn-prev');
@@ -417,6 +564,8 @@
     let currentLimit = 15;
     let totalPages = 1;
     let selectedLsn = '';
+    let activeFilter = 'ALL';
+    let rawEvents = [];
 
     async function fetchLogicalEvents() {
       try {
@@ -442,30 +591,42 @@
 
           if (!data.events || data.events.length === 0) {
             feed.innerHTML = '<div class="empty-feed">Listening for unread logical decoding changes...</div>';
+            insertCount.textContent = '0';
+            updateCount.textContent = '0';
+            deleteCount.textContent = '0';
             return;
           }
 
-          feed.innerHTML = '';
-          data.events.forEach(ev => {
-            const card = document.createElement('div');
-            card.className = 'event-card';
-            const isCommit = ev.isCommit || ev.data.includes('COMMIT');
-
-            card.innerHTML = `
-              <div class="event-top">
-                <span class="lsn-badge">LSN: ${ev.lsn}</span>
-                <div>
-                  ${isCommit ? `<button class="btn-restore" onclick="openRestoreModal('${ev.lsn}')">Restore to LSN</button>` : `<span style="font-size: 0.8rem; color: var(--text-muted);">Decoded Stream</span>`}
-                </div>
-              </div>
-              <div class="event-data">${escapeHtml(ev.data)}</div>
-            `;
-            feed.appendChild(card);
-          });
+          rawEvents = data.events;
+          updateCounters(rawEvents);
+          renderEvents();
         }
       } catch (err) {
         console.error("Error fetching logical events:", err);
       }
+    }
+
+    function updateCounters(events) {
+      let ins = 0, upd = 0, del = 0;
+      events.forEach(ev => {
+        const text = ev.data.toUpperCase();
+        if (text.includes('INSERT:')) ins++;
+        else if (text.includes('UPDATE:')) upd++;
+        else if (text.includes('DELETE:')) del++;
+      });
+      insertCount.textContent = ins;
+      updateCount.textContent = upd;
+      deleteCount.textContent = del;
+    }
+
+    function setOpFilter(filterType, element) {
+      activeFilter = filterType;
+      document.querySelectorAll('.pill-btn').forEach(btn => btn.classList.remove('active', 'insert', 'update', 'delete'));
+      element.classList.add('active');
+      if (filterType === 'INSERT') element.classList.add('insert');
+      if (filterType === 'UPDATE') element.classList.add('update');
+      if (filterType === 'DELETE') element.classList.add('delete');
+      renderEvents();
     }
 
     function applyFilter() {
@@ -478,6 +639,76 @@
       document.getElementById('end-date').value = '';
       currentPage = 1;
       fetchLogicalEvents();
+    }
+
+    function renderEvents() {
+      const filtered = rawEvents.filter(ev => {
+        const text = ev.data.toUpperCase();
+        if (activeFilter === 'INSERT' && !text.includes('INSERT:')) return false;
+        if (activeFilter === 'UPDATE' && !text.includes('UPDATE:')) return false;
+        if (activeFilter === 'DELETE' && !text.includes('DELETE:')) return false;
+        return true;
+      });
+
+      if (filtered.length === 0) {
+        feed.innerHTML = `<div class="empty-feed">No ${activeFilter} transactions found in current feed.</div>`;
+        return;
+      }
+
+      feed.innerHTML = '';
+      filtered.forEach(ev => {
+        const card = document.createElement('div');
+        const text = ev.data;
+        const upper = text.toUpperCase();
+
+        let opClass = 'op-tx';
+        let badgeClass = 'tx';
+        let opLabel = 'TRANSACTION';
+
+        if (upper.includes('INSERT:')) {
+          opClass = 'op-insert';
+          badgeClass = 'insert';
+          opLabel = 'INSERT';
+        } else if (upper.includes('UPDATE:')) {
+          opClass = 'op-update';
+          badgeClass = 'update';
+          opLabel = 'UPDATE';
+        } else if (upper.includes('DELETE:')) {
+          opClass = 'op-delete';
+          badgeClass = 'delete';
+          opLabel = 'DELETE';
+        } else if (upper.includes('COMMIT')) {
+          opLabel = 'COMMIT';
+        } else if (upper.includes('BEGIN')) {
+          opLabel = 'BEGIN';
+        }
+
+        card.className = `event-card ${opClass}`;
+
+        const isCommit = ev.isCommit || upper.includes('COMMIT');
+
+        card.innerHTML = `
+          <div class="event-header">
+            <div style="display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap;">
+              <span class="badge-op ${badgeClass}">${opLabel}</span>
+              <span class="lsn-pill">LSN: ${ev.lsn}</span>
+            </div>
+            <div style="display: flex; gap: 0.5rem; align-items: center;">
+              <button class="btn-secondary" style="padding: 0.3rem 0.7rem; font-size: 0.78rem;" onclick="navigator.clipboard.writeText('${ev.lsn}'); alert('LSN ${ev.lsn} copied to clipboard!')">Copy LSN</button>
+              <button class="btn-restore" onclick="openRestoreModal('${ev.lsn}')">Restore to LSN</button>
+            </div>
+          </div>
+          <div class="event-body">${formatSqlData(text)}</div>
+        `;
+        feed.appendChild(card);
+      });
+    }
+
+    function formatSqlData(text) {
+      let formatted = escapeHtml(text);
+      formatted = formatted.replace(/(table\s+[^\s:]+)/gi, '<span class="highlight-table">$1</span>');
+      formatted = formatted.replace(/(INSERT:|UPDATE:|DELETE:|BEGIN|COMMIT)/gi, '<span class="highlight-kw">$1</span>');
+      return formatted;
     }
 
     function changeLimit() {
