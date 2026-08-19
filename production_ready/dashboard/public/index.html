@@ -59,7 +59,7 @@
     }
 
     .container {
-      max-width: 1240px;
+      max-width: 1280px;
       margin: 0 auto;
     }
 
@@ -93,7 +93,8 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 1.4rem;
+      font-size: 1rem;
+      font-weight: 800;
       border: 1px solid #c7d2fe;
     }
 
@@ -108,6 +109,33 @@
       font-size: 0.85rem;
       color: var(--text-muted);
       margin-top: 0.15rem;
+    }
+
+    .nav-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.8rem;
+    }
+
+    .nav-link-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      background: var(--primary-light);
+      border: 1px solid #c7d2fe;
+      color: var(--primary);
+      padding: 0.5rem 1.1rem;
+      border-radius: 10px;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 0.85rem;
+      transition: all 0.2s ease;
+    }
+
+    .nav-link-btn:hover {
+      background: var(--primary);
+      color: #ffffff;
+      border-color: var(--primary);
     }
 
     .status-pill {
@@ -175,7 +203,7 @@
       color: var(--text-dark);
     }
 
-    /* Toolbar & Filter Options */
+    /* Toolbar Controls */
     .toolbar {
       background: var(--bg-card);
       border: 1px solid var(--border-color);
@@ -232,11 +260,6 @@
       border-radius: 8px;
       font-family: var(--font-main);
       font-size: 0.82rem;
-    }
-
-    .date-input:focus {
-      outline: none;
-      border-color: var(--primary);
     }
 
     .btn-primary {
@@ -308,7 +331,7 @@
       gap: 0.8rem;
     }
 
-    /* Event Cards Feed Stream */
+    /* Event Feed */
     .feed-container {
       display: flex;
       flex-direction: column;
@@ -441,15 +464,18 @@
   <div class="container">
     <header>
       <div class="brand-area">
-        <div class="brand-icon" style="font-weight: 700; font-size: 1.1rem; letter-spacing: -0.5px;">DB</div>
+        <div class="brand-icon">DB</div>
         <div class="title-group">
-          <h1>Logical Streaming Dashboard</h1>
-          <div class="sub">PostgreSQL Real-Time WAL Replication & Point-in-Time Recovery Engine</div>
+          <h1>Logical Streaming & Recovery System</h1>
+          <div class="sub">Enterprise PostgreSQL Point-in-Time Recovery & Real-Time Logical Streamer</div>
         </div>
       </div>
-      <div class="status-pill">
-        <div class="pulse-dot"></div>
-        <span id="slotStatus">Stream Active</span>
+      <div class="nav-actions">
+        <a href="/docs.html" class="nav-link-btn">Docs</a>
+        <div class="status-pill">
+          <div class="pulse-dot"></div>
+          <span id="slotStatus">Stream Active</span>
+        </div>
       </div>
     </header>
 
@@ -684,8 +710,6 @@
         }
 
         card.className = `event-card ${opClass}`;
-
-        const isCommit = ev.isCommit || upper.includes('COMMIT');
 
         card.innerHTML = `
           <div class="event-header">
