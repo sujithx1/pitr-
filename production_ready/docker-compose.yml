@@ -3,8 +3,8 @@ version: "3.9"
 services:
   postgres_prod:
     build: ./postgres
-    image: postgres-18:latest
-    container_name: postgres_pitr_prod
+    image: postgres-18
+    container_name: ${PG_CONTAINER_NAME:-postgres_pitr_prod}
     restart: always
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-dev}
