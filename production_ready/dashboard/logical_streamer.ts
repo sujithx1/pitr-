@@ -158,6 +158,6 @@ app.post('/api/restore', async (c) => {
 });
 
 export default {
-  port: process.env.LOGICAL_PORT || 4001,
+  port: process.env.LOGICAL_PORT || 7100,
   fetch: app.fetch
 };
