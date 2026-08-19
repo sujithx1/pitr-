@@ -124,8 +124,8 @@ app.get('/api/wal/logical', (c) => {
       });
     }
 
-    // Reverse to show newest first
-    events = events.reverse();
+    // Sort in strict DESCENDING order (Newest LSN first)
+    events.sort((a, b) => b.lsn.localeCompare(a.lsn, undefined, { numeric: true, sensitivity: 'base' }));
 
     // Pagination
     const total = events.length;
