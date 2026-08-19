@@ -90,10 +90,22 @@ app.get('/api/wal/logical', (c) => {
 
     const startDate = c.req.query('start_date');
     const endDate = c.req.query('end_date');
-    const page = parseInt(c.req.query('page') || '1', 10);
-    const limit = parseInt(c.req.query('limit') || '15', 10);
+    const page = Math.max(1, parseInt(c.req.query('page') || '1', 10));
+    const limit = Math.max(1, parseInt(c.req.query('limit') || '15', 10));
+    const offset = (page - 1) * limit;
 
-    const sql = "SELECT lsn, data FROM pg_logical_slot_peek_changes('pitr_logical_slot', NULL, 500);";
+    // 1. Get total count natively via PostgreSQL SQL COUNT(*)
+    const countSql = "SELECT count(*) FROM pg_logical_slot_peek_changes('pitr_logical_slot', NULL, 500);";
+    const totalCountStr = runSql(countSql);
+    const total = parseInt(totalCountStr || '0', 10);
+    const totalPages = Math.ceil(total / limit) || 1;
+
+    if (total === 0) {
+      return c.json({ events: [], total: 0, page, limit, totalPages: 0, notice: "No active unread changes in logical slot." });
+    }
+
+    // 2. Fetch paginated events natively via PostgreSQL SQL ORDER BY lsn DESC LIMIT & OFFSET
+    const sql = `SELECT lsn, data FROM pg_logical_slot_peek_changes('pitr_logical_slot', NULL, 500) ORDER BY lsn DESC LIMIT ${limit} OFFSET ${offset};`;
     let rawOutput = runSql(sql);
 
     if (!rawOutput) {
@@ -109,7 +121,7 @@ app.get('/api/wal/logical', (c) => {
       return { lsn, data, isCommit };
     });
 
-    // Date Filtering
+    // Optional Date Filtering
     if (startDate || endDate) {
       const startMs = startDate ? new Date(startDate).getTime() : 0;
       const endMs = endDate ? new Date(endDate).getTime() : Infinity;
@@ -124,24 +136,14 @@ app.get('/api/wal/logical', (c) => {
       });
     }
 
-    // Sort in strict DESCENDING order (Newest LSN first)
-    events.sort((a, b) => b.lsn.localeCompare(a.lsn, undefined, { numeric: true, sensitivity: 'base' }));
-
-    // Pagination
-    const total = events.length;
-    const totalPages = Math.ceil(total / limit) || 1;
-    const safePage = Math.max(1, Math.min(page, totalPages));
-    const startIndex = (safePage - 1) * limit;
-    const paginatedEvents = events.slice(startIndex, startIndex + limit);
-
     return c.json({
       slot: 'pitr_logical_slot',
       plugin: 'test_decoding',
       total,
-      page: safePage,
+      page,
       limit,
       totalPages,
-      events: paginatedEvents
+      events
     });
   } catch (err: any) {
     return c.json({ success: false, error: err.message }, 500);
