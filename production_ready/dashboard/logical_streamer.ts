@@ -93,8 +93,8 @@ app.get('/api/wal/logical', (c) => {
     const page = Math.max(1, parseInt(c.req.query('page') || '1', 10));
     const limit = Math.max(1, parseInt(c.req.query('limit') || '15', 10));
 
-    // 1. Fetch raw output from PostgreSQL
-    const sql = "SELECT lsn, data FROM pg_logical_slot_peek_changes('pitr_logical_slot', NULL, 500);";
+    // 1. Fetch raw output from PostgreSQL (NULL limit so all changes are read)
+    const sql = "SELECT lsn, data FROM pg_logical_slot_peek_changes('pitr_logical_slot', NULL, NULL);";
     let rawOutput = runSql(sql);
 
     if (!rawOutput) {
