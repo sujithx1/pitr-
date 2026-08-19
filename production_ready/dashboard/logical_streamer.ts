@@ -116,13 +116,13 @@ app.get('/api/wal/logical', (c) => {
       const data = parts.slice(1).join('|') || '';
       const isCommit = data.includes('COMMIT');
 
-      const timeMatch = data.match(/(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}(\.\d+)?)/);
+      const timeMatch = data.match(/(20\d{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])\s+(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:[+-]\d{2}(?::\d{2})?)?)/);
       const timestamp = timeMatch && timeMatch[1] ? timeMatch[1] : '';
 
       return { lsn, data, isCommit, timestamp };
     });
 
-    // 2. Compute accurate metric counts across the FULL dataset (all 500 records)
+    // 2. Compute accurate metric counts across the FULL dataset
     let inserts = 0, updates = 0, deletes = 0;
     allEvents.forEach(ev => {
       const upper = ev.data.toUpperCase();
@@ -137,7 +137,7 @@ app.get('/api/wal/logical', (c) => {
       const endMs = endDate ? new Date(endDate).getTime() : Infinity;
 
       allEvents = allEvents.filter(ev => {
-        const timeMatch = ev.data.match(/(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})/);
+        const timeMatch = ev.data.match(/(20\d{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])\s+(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:[+-]\d{2}(?::\d{2})?)?)/);
         if (timeMatch && timeMatch[1]) {
           const evMs = new Date(timeMatch[1]).getTime();
           return evMs >= startMs && evMs <= endMs;
