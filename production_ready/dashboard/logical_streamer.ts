@@ -6,6 +6,27 @@
 import { Hono } from 'hono';
 import { serveStatic } from 'hono/bun';
 import { execSync } from 'child_process';
+import { readFileSync, existsSync } from 'fs';
+import { resolve } from 'path';
+
+// Strictly load environment variables from production_ready/.env
+const prodEnvPath = resolve(__dirname, '../.env');
+if (existsSync(prodEnvPath)) {
+  try {
+    const content = readFileSync(prodEnvPath, 'utf-8');
+    for (const line of content.split('\n')) {
+      const trimmed = line.trim();
+      if (trimmed && !trimmed.startsWith('#') && trimmed.includes('=')) {
+        const [key, ...valParts] = trimmed.split('=');
+        const k = key.trim();
+        const v = valParts.join('=').trim().replace(/^["']|["']$/g, '');
+        if (k) {
+          process.env[k] = v;
+        }
+      }
+    }
+  } catch (e) {}
+}
 
 const app = new Hono();
 
