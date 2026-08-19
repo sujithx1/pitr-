@@ -92,28 +92,25 @@ app.get('/api/wal/logical', (c) => {
     const endDate = c.req.query('end_date');
     const page = Math.max(1, parseInt(c.req.query('page') || '1', 10));
     const limit = Math.max(1, parseInt(c.req.query('limit') || '15', 10));
-    const offset = (page - 1) * limit;
 
-    // 1. Get total count natively via PostgreSQL SQL COUNT(*)
-    const countSql = "SELECT count(*) FROM pg_logical_slot_peek_changes('pitr_logical_slot', NULL, 500);";
-    const totalCountStr = runSql(countSql);
-    const total = parseInt(totalCountStr || '0', 10);
-    const totalPages = Math.ceil(total / limit) || 1;
-
-    if (total === 0) {
-      return c.json({ events: [], total: 0, page, limit, totalPages: 0, notice: "No active unread changes in logical slot." });
-    }
-
-    // 2. Fetch paginated events natively via PostgreSQL SQL ORDER BY lsn DESC LIMIT & OFFSET
-    const sql = `SELECT lsn, data FROM pg_logical_slot_peek_changes('pitr_logical_slot', NULL, 500) ORDER BY lsn DESC LIMIT ${limit} OFFSET ${offset};`;
+    // 1. Fetch raw output from PostgreSQL
+    const sql = "SELECT lsn, data FROM pg_logical_slot_peek_changes('pitr_logical_slot', NULL, 500);";
     let rawOutput = runSql(sql);
 
     if (!rawOutput) {
-      return c.json({ events: [], total: 0, page, limit, totalPages: 0, notice: "No active unread changes in logical slot." });
+      return c.json({
+        events: [],
+        total: 0,
+        page,
+        limit,
+        totalPages: 0,
+        metrics: { total: 0, inserts: 0, updates: 0, deletes: 0 },
+        notice: "No active unread changes in logical slot."
+      });
     }
 
     const lines = rawOutput.split('\n');
-    let events = lines.map((line) => {
+    let allEvents = lines.map((line) => {
       const parts = line.split('|');
       const lsn = parts[0] || '';
       const data = parts.slice(1).join('|') || '';
@@ -121,12 +118,21 @@ app.get('/api/wal/logical', (c) => {
       return { lsn, data, isCommit };
     });
 
-    // Optional Date Filtering
+    // 2. Compute accurate metric counts across the FULL dataset (all 500 records)
+    let inserts = 0, updates = 0, deletes = 0;
+    allEvents.forEach(ev => {
+      const upper = ev.data.toUpperCase();
+      if (upper.includes('INSERT:')) inserts++;
+      else if (upper.includes('UPDATE:')) updates++;
+      else if (upper.includes('DELETE:')) deletes++;
+    });
+
+    // 3. Filter Date Range across the FULL dataset
     if (startDate || endDate) {
       const startMs = startDate ? new Date(startDate).getTime() : 0;
       const endMs = endDate ? new Date(endDate).getTime() : Infinity;
 
-      events = events.filter(ev => {
+      allEvents = allEvents.filter(ev => {
         const timeMatch = ev.data.match(/(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})/);
         if (timeMatch && timeMatch[1]) {
           const evMs = new Date(timeMatch[1]).getTime();
@@ -136,14 +142,30 @@ app.get('/api/wal/logical', (c) => {
       });
     }
 
+    // 4. Sort in strict DESCENDING order (Newest LSN first)
+    allEvents.sort((a, b) => b.lsn.localeCompare(a.lsn, undefined, { numeric: true, sensitivity: 'base' }));
+
+    // 5. Paginate after computing full metrics & date filtering
+    const total = allEvents.length;
+    const totalPages = Math.ceil(total / limit) || 1;
+    const safePage = Math.max(1, Math.min(page, totalPages));
+    const startIndex = (safePage - 1) * limit;
+    const paginatedEvents = allEvents.slice(startIndex, startIndex + limit);
+
     return c.json({
       slot: 'pitr_logical_slot',
       plugin: 'test_decoding',
       total,
-      page,
+      page: safePage,
       limit,
       totalPages,
-      events
+      metrics: {
+        total,
+        inserts,
+        updates,
+        deletes
+      },
+      events: paginatedEvents
     });
   } catch (err: any) {
     return c.json({ success: false, error: err.message }, 500);

@@ -624,7 +624,7 @@
           }
 
           rawEvents = data.events;
-          updateCounters(rawEvents);
+          updateCounters(data.metrics, rawEvents);
           renderEvents();
         }
       } catch (err) {
@@ -632,14 +632,22 @@
       }
     }
 
-    function updateCounters(events) {
+    function updateCounters(metrics, events) {
+      if (metrics) {
+        insertCount.textContent = metrics.inserts || 0;
+        updateCount.textContent = metrics.updates || 0;
+        deleteCount.textContent = metrics.deletes || 0;
+        return;
+      }
       let ins = 0, upd = 0, del = 0;
-      events.forEach(ev => {
-        const text = ev.data.toUpperCase();
-        if (text.includes('INSERT:')) ins++;
-        else if (text.includes('UPDATE:')) upd++;
-        else if (text.includes('DELETE:')) del++;
-      });
+      if (events) {
+        events.forEach(ev => {
+          const text = ev.data.toUpperCase();
+          if (text.includes('INSERT:')) ins++;
+          else if (text.includes('UPDATE:')) upd++;
+          else if (text.includes('DELETE:')) del++;
+        });
+      }
       insertCount.textContent = ins;
       updateCount.textContent = upd;
       deleteCount.textContent = del;
