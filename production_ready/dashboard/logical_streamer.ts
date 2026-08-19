@@ -91,10 +91,10 @@ app.get('/api/wal/logical', (c) => {
     const startDate = c.req.query('start_date');
     const endDate = c.req.query('end_date');
     const page = Math.max(1, parseInt(c.req.query('page') || '1', 10));
-    const limit = Math.max(1, parseInt(c.req.query('limit') || '15', 10));
+    const limit = Math.max(1, parseInt(c.req.query('limit') || '50', 10));
 
-    // 1. Fetch raw output from PostgreSQL (NULL limit so all changes are read)
-    const sql = "SELECT lsn, data FROM pg_logical_slot_peek_changes('pitr_logical_slot', NULL, NULL);";
+    // 1. Fetch newest 1000 changes natively in PostgreSQL (ORDER BY lsn DESC LIMIT 1000)
+    const sql = "SELECT lsn, data FROM pg_logical_slot_peek_changes('pitr_logical_slot', NULL, NULL) ORDER BY lsn DESC LIMIT 1000;";
     let rawOutput = runSql(sql);
 
     if (!rawOutput) {
@@ -115,7 +115,11 @@ app.get('/api/wal/logical', (c) => {
       const lsn = parts[0] || '';
       const data = parts.slice(1).join('|') || '';
       const isCommit = data.includes('COMMIT');
-      return { lsn, data, isCommit };
+
+      const timeMatch = data.match(/(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}(\.\d+)?)/);
+      const timestamp = timeMatch && timeMatch[1] ? timeMatch[1] : '';
+
+      return { lsn, data, isCommit, timestamp };
     });
 
     // 2. Compute accurate metric counts across the FULL dataset (all 500 records)
