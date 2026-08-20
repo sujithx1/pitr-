@@ -115,10 +115,9 @@ app.get('/api/wal/logical', (c) => {
       const lsn = parts[0] || '';
       const data = parts.slice(1).join('|') || '';
       const isCommit = data.includes('COMMIT');
-
-      const timeMatch = data.match(/(20\d{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])\s+(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:[+-]\d{2}(?::\d{2})?)?)/);
-      const timestamp = timeMatch && timeMatch[1] ? timeMatch[1] : '';
-
+      const timeMatches = [...data.matchAll(/(20\d{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])\s+(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:[+-]\d{2}(?::\d{2})?)?)/g)];
+      const timestamp = timeMatches.length > 0 ? timeMatches[timeMatches.length - 1][1] : '';
+      
       return { lsn, data, isCommit, timestamp };
     });
 
@@ -137,9 +136,9 @@ app.get('/api/wal/logical', (c) => {
       const endMs = endDate ? new Date(endDate).getTime() : Infinity;
 
       allEvents = allEvents.filter(ev => {
-        const timeMatch = ev.data.match(/(20\d{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])\s+(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:[+-]\d{2}(?::\d{2})?)?)/);
-        if (timeMatch && timeMatch[1]) {
-          const evMs = new Date(timeMatch[1]).getTime();
+        const timeMatches = [...ev.data.matchAll(/(20\d{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])\s+(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:[+-]\d{2}(?::\d{2})?)?)/g)];
+        if (timeMatches.length > 0) {
+          const evMs = new Date(timeMatches[timeMatches.length - 1][1]).getTime();
           return evMs >= startMs && evMs <= endMs;
         }
         return true;
