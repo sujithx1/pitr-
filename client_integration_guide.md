@@ -32,8 +32,9 @@ You need to instruct PostgreSQL to send its Write-Ahead Logs (WAL) to our backup
 Open your `postgresql.conf` file and update the following settings:
 
 ```ini
-# 1. Enable WAL archiving
-wal_level = replica
+# 1. Enable Logical Decoding & Commit Timestamp Tracking
+wal_level = logical
+track_commit_timestamp = on             # Native transaction commit timestamp tracking
 
 # 2. Tell PostgreSQL to hand files to the agent
 archive_mode = on
@@ -42,7 +43,7 @@ archive_command = 'pgbackrest --stanza=db archive-push %p'
 # 3. Force a backup push every 5 minutes (Maximum Data Loss Window)
 archive_timeout = 300
 ```
-*Note: You must restart your PostgreSQL server after changing `wal_level` or `archive_mode`.*
+*Note: You must restart your PostgreSQL server after changing `wal_level`, `track_commit_timestamp`, or `archive_mode`.*
 
 ---
 
