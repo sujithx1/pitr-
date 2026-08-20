@@ -109,18 +109,36 @@ app.get('/api/wal/logical', (c) => {
       });
     }
 
+    let currentXid = '';
     const lines = rawOutput.split('\n');
     let allEvents = lines.map((line) => {
       const parts = line.split('|');
       const lsn = parts[0] || '';
       const data = parts.slice(1).join('|') || '';
       const isCommit = data.includes('COMMIT');
-      let timestamp = '';
-      const timeMatches = [...data.matchAll(/(20\d{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])\s+(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:[+-]\d{2}(?::\d{2})?)?)/g)];
-      if (timeMatches.length > 0) {
-        timestamp = timeMatches[timeMatches.length - 1][1];
-      }
       
+      const xidMatch = data.match(/(?:BEGIN|COMMIT)\s+(\d+)/);
+      if (xidMatch && xidMatch[1]) {
+        currentXid = xidMatch[1];
+      }
+
+      let timestamp = '';
+      if (currentXid) {
+        try {
+          const commitTs = runSql(`SELECT pg_xact_commit_timestamp('${currentXid}'::xid);`);
+          if (commitTs && !commitTs.includes('ERROR') && !commitTs.includes('could not')) {
+            timestamp = commitTs;
+          }
+        } catch (e) {}
+      }
+
+      if (!timestamp) {
+        const timeMatches = [...data.matchAll(/(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}(\.\d+)?([+-]\d{2}(?::\d{2})?)?)/g)];
+        if (timeMatches.length > 0) {
+          timestamp = timeMatches[timeMatches.length - 1][1];
+        }
+      }
+
       return { lsn, data, isCommit, timestamp };
     });
 

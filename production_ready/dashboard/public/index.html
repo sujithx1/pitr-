@@ -740,7 +740,7 @@
             <div style="display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap;">
               <span class="badge-op ${badgeClass}">${opLabel}</span>
               <span class="lsn-pill">LSN: ${ev.lsn}</span>
-              ${ev.timestamp ? `<span class="time-pill">🕒 ${formatIstTime(ev.timestamp)}</span>` : ''}
+              ${ev.timestamp ? `<span class="time-pill">🕒 ${ev.timestamp}</span>` : ''}
             </div>
             <div style="display: flex; gap: 0.5rem; align-items: center;">
               <button class="btn-secondary" style="padding: 0.3rem 0.7rem; font-size: 0.78rem;" onclick="navigator.clipboard.writeText('${ev.lsn}'); alert('LSN ${ev.lsn} copied to clipboard!')">Copy LSN</button>
