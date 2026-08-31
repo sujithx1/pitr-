@@ -15,6 +15,7 @@ production_ready/postgres_data/
 production_ready/backups/
 production_ready/postgres/pgbackrest_s3.conf
 production_ready/.env
+production_ready/docker-compose.yml
 
 # Dependencies & Build output
 node_modules/
