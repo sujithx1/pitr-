@@ -28,3 +28,7 @@ dist/
 # OS Files
 .DS_Store
 Thumbs.db
+
+
+
+docker-containers/*
