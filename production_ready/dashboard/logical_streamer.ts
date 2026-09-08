@@ -5,9 +5,12 @@
 
 import { Hono } from 'hono';
 import { serveStatic } from 'hono/bun';
-import { execSync } from 'child_process';
+import { execSync, exec } from 'child_process';
+import { promisify } from 'util';
 import { readFileSync, existsSync } from 'fs';
 import { resolve } from 'path';
+
+const execAsync = promisify(exec);
 
 // Strictly load environment variables from production_ready/.env
 const prodEnvPath = resolve(__dirname, '../.env');
@@ -34,10 +37,11 @@ const PG_CONTAINER = process.env.PG_CONTAINER_NAME || 'postgres_pitr_prod';
 const PG_USER = process.env.PG_USER || process.env.POSTGRES_USER || 'dev';
 const PG_DB = process.env.PG_DB || process.env.POSTGRES_DB || 'mds';
 
-function runSql(sql: string): string {
+async function runSql(sql: string): Promise<string> {
   try {
     const cmd = `docker exec ${PG_CONTAINER} psql -U ${PG_USER} -d ${PG_DB} -t -A -P pager=off -c "${sql}"`;
-    return execSync(cmd, { encoding: 'utf-8', stdio: 'pipe' }).trim();
+    const { stdout } = await execAsync(cmd);
+    return stdout.trim();
   } catch (err: any) {
     const stderr = err.stderr ? err.stderr.toString().trim() : err.message;
     console.error(`[LOGICAL STREAMER ERROR] Command failed on ${PG_CONTAINER}: ${stderr}`);
@@ -49,18 +53,18 @@ function runSql(sql: string): string {
 app.use('/*', serveStatic({ root: './public' }));
 
 // Ensure logical replication slot exists
-app.post('/api/logical/init', (c) => {
+app.post('/api/logical/init', async (c) => {
   try {
     let checkSlot = '';
     try {
-      checkSlot = runSql("SELECT slot_name FROM pg_replication_slots WHERE slot_name = 'pitr_logical_slot';");
+      checkSlot = await runSql("SELECT slot_name FROM pg_replication_slots WHERE slot_name = 'pitr_logical_slot';");
     } catch (e: any) {
       return c.json({ success: false, error: e.message }, 500);
     }
 
     if (!checkSlot) {
       try {
-        runSql("SELECT pg_create_logical_replication_slot('pitr_logical_slot', 'test_decoding');");
+        await runSql("SELECT pg_create_logical_replication_slot('pitr_logical_slot', 'test_decoding');");
         return c.json({ success: true, message: "Logical replication slot 'pitr_logical_slot' created successfully." });
       } catch (e: any) {
         return c.json({ success: false, error: e.message }, 500);
@@ -72,30 +76,30 @@ app.post('/api/logical/init', (c) => {
   }
 });
 
-function ensureSlotExists() {
+async function ensureSlotExists() {
   try {
     const checkSql = "SELECT slot_name FROM pg_replication_slots WHERE slot_name = 'pitr_logical_slot';";
-    const exists = runSql(checkSql);
+    const exists = await runSql(checkSql);
     if (!exists) {
       console.log("[LOGICAL STREAMER] Auto-creating missing replication slot 'pitr_logical_slot'...");
-      runSql("SELECT pg_create_logical_replication_slot('pitr_logical_slot', 'test_decoding');");
+      await runSql("SELECT pg_create_logical_replication_slot('pitr_logical_slot', 'test_decoding');");
     }
   } catch (e) { }
 }
 
 // Peek at recent logical decoding JSON events with Pagination & Date Filtering
-app.get('/api/wal/logical', (c) => {
+app.get('/api/wal/logical', async (c) => {
   try {
-    ensureSlotExists();
+    await ensureSlotExists();
 
     const startDate = c.req.query('start_date');
     const endDate = c.req.query('end_date');
     const page = Math.max(1, parseInt(c.req.query('page') || '1', 10));
     const limit = Math.max(1, parseInt(c.req.query('limit') || '50', 10));
 
-    // 1. Fetch newest 1000 changes natively in PostgreSQL (ORDER BY lsn DESC LIMIT 1000)
-    const sql = "SELECT lsn, data FROM pg_logical_slot_peek_changes('pitr_logical_slot', NULL, NULL) ORDER BY lsn DESC LIMIT 1000;";
-    let rawOutput = runSql(sql);
+    // 1. Fetch up to 1000 changes natively in PostgreSQL (upto_nchanges = 1000)
+    const sql = "SELECT lsn, data FROM pg_logical_slot_peek_changes('pitr_logical_slot', NULL, 1000) ORDER BY lsn DESC;";
+    let rawOutput = await runSql(sql);
 
     if (!rawOutput) {
       return c.json({
