@@ -40,7 +40,7 @@ const PG_DB = process.env.PG_DB || process.env.POSTGRES_DB || 'mds';
 async function runSql(sql: string): Promise<string> {
   try {
     const cmd = `docker exec ${PG_CONTAINER} psql -U ${PG_USER} -d ${PG_DB} -t -A -P pager=off -c "${sql}"`;
-    const { stdout } = await execAsync(cmd);
+    const { stdout } = await execAsync(cmd, { maxBuffer: 1024 * 1024 * 50 });
     return stdout.trim();
   } catch (err: any) {
     const stderr = err.stderr ? err.stderr.toString().trim() : err.message;
@@ -97,8 +97,8 @@ app.get('/api/wal/logical', async (c) => {
     const page = Math.max(1, parseInt(c.req.query('page') || '1', 10));
     const limit = Math.max(1, parseInt(c.req.query('limit') || '50', 10));
 
-    // 1. Fetch up to 1000 changes natively in PostgreSQL (upto_nchanges = 1000)
-    const sql = "SELECT lsn, data FROM pg_logical_slot_peek_changes('pitr_logical_slot', NULL, 1000) ORDER BY lsn DESC;";
+    // 1. Fetch up to 500 changes natively in PostgreSQL (upto_nchanges = 500)
+    const sql = "SELECT lsn, data FROM pg_logical_slot_peek_changes('pitr_logical_slot', NULL, 500) ORDER BY lsn DESC;";
     let rawOutput = await runSql(sql);
 
     if (!rawOutput) {
