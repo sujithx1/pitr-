@@ -1,72 +1,92 @@
 # Production Readiness Ecosystem (`production_ready/`)
 
-This directory contains all enterprise-grade production modules outlined in [`improvement.md`](file:///Users/sujith/sujith/pitr/improvement.md). 
-It is structured as a **100% separate, independent folder**, keeping all existing lab code completely untouched.
+This directory contains all enterprise-grade production modules outlined in [`improvement.md`](../improvement.md).
+It is structured as a **separate, independent folder**, keeping lab code untouched.
 
 ---
 
-## 📁 Folder Structure
+## Folder Structure
 
 ```text
 production_ready/
-├── docker-compose.yml              # Production Postgres Stack (postgres_pitr_prod)
+├── docker-compose.yml              # Production Postgres Stack
 ├── postgres/
-│   ├── Dockerfile                  # Production Image with pgBackRest pre-installed
-│   ├── postgresql.conf             # Production Config (wal_level = logical + Archiving)
+│   ├── Dockerfile                  # Production Image with pgBackRest
+│   ├── postgresql.conf             # wal_level=replica + archiving + max_slot_wal_keep_size
 │   ├── pgbackrest.conf             # Local pgBackRest configuration
-│   ├── pg_hba.conf                 # Production Host-Based Authentication
-│   ├── init.sql                    # Initial SQL Schema
-│   └── pgbackrest_s3.conf.template # AWS S3 pgBackRest template with AES-256 encryption
+│   ├── pg_hba.conf                 # Host-Based Authentication
+│   └── init.sql                    # Initial SQL Schema
 ├── dashboard/
-│   ├── logical_streamer.ts         # Logical Decoding JSON stream server (Port 4001)
+│   ├── logical_streamer.ts         # PITR monitor API + restore triggers
 │   ├── metrics.ts                  # Prometheus metrics exporter
-│   ├── public/index.html           # Dark glassmorphic Web UI with pagination & date pickers
-│   └── package.json                # Independent dependencies
+│   ├── public/index.html           # WAL / archive / backup dashboard
+│   └── package.json
 └── scripts/
-    ├── alert.sh                    # Standalone Slack / PagerDuty / Teams webhook alert tool
-    ├── backup_with_alert.sh        # Backup pipeline wrapper triggering automated webhook alerts
-    ├── setup_s3_backup.sh          # CLI tool to configure pgBackRest AWS S3 cloud backups
-    └── restore_cluster_clone.sh    # Physical cluster promotion engine for 5TB+ databases
+    ├── alert.sh
+    ├── backup_with_alert.sh
+    ├── setup_s3_backup.sh
+    ├── restore_cluster_clone.sh
+    └── restore_inplace.sh
 ```
 
 ---
 
-## 🚀 Quick Start (Production Database Container)
-
-To start the production PostgreSQL database container:
+## Quick Start (Production Database Container)
 
 ```bash
 cd production_ready
 docker compose up -d --build
 ```
 
-* **Production Postgres Container**: `postgres_pitr_prod`
-* **Port**: `5432`
+- **Container**: `postgres_pitr_prod` (or name from `.env`)
+- **Port**: typically `5433` locally
+
+**Config note:** `postgresql.conf` uses `wal_level = replica` (enough for PITR). Changing `wal_level` requires a **Postgres restart** after deploy.
 
 ---
 
-## 🧪 Running Dashboard & Modules
+## Running Dashboard & Modules
 
-### 1. Logical Decoding Real-Time Web UI
-Run the dashboard directly using Bun:
+### 1. PITR Monitor Web UI
+
 ```bash
 cd production_ready/dashboard
 bun dev
 ```
-* **Open Browser**: `http://localhost:4001`
-* **Features**: Live decoded transaction timeline, Pagination (`10`, `15`, `25`, `50`), Date filtering, Interactive **"Restore to LSN"** modal.
 
-### 2. Automated Webhook Alerting
+- **Open**: `http://localhost:4001` (or `LOGICAL_PORT` from `.env`; default in code is `7100`)
+- **Features**: DB/WAL/archive/backup status, restore by **timestamp** or **LSN** (cluster clone or in-place)
+- **Setup page**: `/setup.html` — copyable docker-compose (no secrets), explanations, and `postgres/` config browser
+- **APIs**: `GET /api/status`, `GET /metrics`, `POST /api/restore`
+- **No logical replication slots** — the dashboard does not create or peek slots (avoids unbounded `pg_wal` growth)
+
+### 2. Deploy / upgrade ops (one-time if an old slot exists)
+
+If a previous version created `pitr_logical_slot`:
+
+```bash
+# 1. Stop the dashboard (e.g. pm2 stop pitr)
+# 2. Drop the leftover slot
+docker exec -it postgres_pitr_prod psql -U dev -d mds -c \
+  "SELECT pg_drop_replication_slot('pitr_logical_slot');"
+# 3. Restart Postgres if applying wal_level=replica
+# 4. Start the updated dashboard
+```
+
+### 3. Automated Backup Alerting
+
 ```bash
 ./production_ready/scripts/backup_with_alert.sh full
 ```
 
-### 3. AWS S3 Cloud Storage Generator
+### 4. AWS S3 Cloud Storage Generator
+
 ```bash
 ./production_ready/scripts/setup_s3_backup.sh
 ```
 
-### 4. High-Speed Physical Cluster Promotion Recovery
+### 5. Physical Cluster Promotion Recovery
+
 ```bash
 ./production_ready/scripts/restore_cluster_clone.sh <LSN_OR_TIMESTAMP>
 ```

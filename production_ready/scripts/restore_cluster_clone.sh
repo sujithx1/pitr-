@@ -30,12 +30,20 @@ STANZA_NAME=${STANZA_NAME:-"db"}
 PROMOTED_CONTAINER="postgres_pitr_cluster_promoted"
 PROMOTED_VOLUME="pitr_promoted_pgdata"
 PROMOTED_PORT="5434"
+PGDATA_PATH="/var/lib/postgresql/18/docker"
+DB_TZ="${TZ:-Asia/Kolkata}"
+DB_TZ_OFFSET="+05:30"
 
 # Auto-detect if target is an LSN or timestamp
 if [[ "$TARGET_LSN" =~ ^[0-9A-Fa-f]+/[0-9A-Fa-f]+$ ]]; then
     TYPE_FLAG="--type=lsn"
 else
     TYPE_FLAG="--type=time"
+    # Bare local timestamps are treated as UTC by Postgres recovery unless offset is set.
+    if [[ ! "$TARGET_LSN" =~ [Zz]$ ]] && [[ ! "$TARGET_LSN" =~ [+-][0-9]{2}(:?[0-9]{2})?$ ]]; then
+        TARGET_LSN="${TARGET_LSN}${DB_TZ_OFFSET}"
+        echo "NOTE: Assumed timezone ${DB_TZ} (${DB_TZ_OFFSET}) for target time."
+    fi
 fi
 
 echo "=================================================="
@@ -57,9 +65,11 @@ docker volume rm "$PROMOTED_VOLUME" 2>/dev/null || true
 docker volume create "$PROMOTED_VOLUME"
 
 # 2. Restore pgBackRest files into recovery volume
+# Named volume is owned by postgres (UID 999), so restore as postgres is fine.
 echo "[2/4] Executing pgBackRest restore..."
 docker run --rm \
     --user postgres \
+    -e TZ="$DB_TZ" \
     -v "$PROMOTED_VOLUME":/var/lib/postgresql \
     -v "$PROD_DIR/backups:/backups" \
     -v "$PROD_DIR/postgres/pgbackrest.conf:/etc/pgbackrest/pgbackrest.conf" \
@@ -67,9 +77,15 @@ docker run --rm \
     pgbackrest --stanza="$STANZA_NAME" $TYPE_FLAG --target="$TARGET_LSN" --target-action=promote restore
 
 # 3. Boot promoted cluster container on port 5434
+# Must set PGDATA to the same path pgBackRest restored (not image default .../data).
 echo "[3/4] Launching promoted database on port $PROMOTED_PORT..."
 docker run -d \
     --name "$PROMOTED_CONTAINER" \
+    -e PGDATA="$PGDATA_PATH" \
+    -e TZ="$DB_TZ" \
+    -e POSTGRES_USER="${POSTGRES_USER:-dev}" \
+    -e POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-devpostgres@123}" \
+    -e POSTGRES_DB="${POSTGRES_DB:-mds}" \
     -v "$PROMOTED_VOLUME":/var/lib/postgresql \
     -v "$PROD_DIR/backups:/backups" \
     -v "$PROD_DIR/postgres/pgbackrest.conf:/etc/pgbackrest/pgbackrest.conf" \
@@ -81,12 +97,26 @@ docker run -d \
 
 # 4. Wait for database to start
 echo "[4/4] Waiting for database cluster to boot..."
-until docker exec "$PROMOTED_CONTAINER" pg_isready &>/dev/null; do
+ATTEMPTS=0
+MAX_ATTEMPTS=60
+until docker exec "$PROMOTED_CONTAINER" pg_isready -U "${POSTGRES_USER:-dev}" -d "${POSTGRES_DB:-mds}" &>/dev/null; do
+    ATTEMPTS=$((ATTEMPTS + 1))
     if ! docker ps --format '{{.Names}}' | grep -q "^${PROMOTED_CONTAINER}$"; then
         echo "ERROR: Promoted database container exited during recovery."
+        echo "--- container logs ---"
+        docker logs "$PROMOTED_CONTAINER" --tail 40 2>&1 || true
+        echo "--- PGDATA log ---"
+        docker run --rm -v "$PROMOTED_VOLUME":/var/lib/postgresql "$IMAGE_NAME" \
+            sh -c "ls -t $PGDATA_PATH/log/*.log 2>/dev/null | head -1 | xargs -r tail -40" || true
         docker rm -f "$PROMOTED_CONTAINER" 2>/dev/null || true
         exit 1
     fi
+    if [ "$ATTEMPTS" -ge "$MAX_ATTEMPTS" ]; then
+        echo "ERROR: Timed out waiting for promoted database."
+        docker logs "$PROMOTED_CONTAINER" --tail 40 2>&1 || true
+        exit 1
+    fi
+    echo " -> Replaying WAL logs... ($ATTEMPTS/$MAX_ATTEMPTS)"
     sleep 2
 done
 

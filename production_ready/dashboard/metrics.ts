@@ -13,9 +13,9 @@ function runCmd(cmd: string): string {
 }
 
 export function generatePrometheusMetrics(): string {
-  const containerName = process.env.PG_CONTAINER_NAME || 'postgres_db_18';
-  const pgUser = process.env.PG_USER || 'dev';
-  const pgDb = process.env.PG_DB || 'mds';
+  const containerName = process.env.PG_CONTAINER_NAME || 'postgres_pitr_prod';
+  const pgUser = process.env.PG_USER || process.env.POSTGRES_USER || 'dev';
+  const pgDb = process.env.PG_DB || process.env.POSTGRES_DB || 'mds';
   const stanzaName = process.env.STANZA_NAME || 'db';
 
   let dbOnline = 0;

@@ -3,578 +3,469 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PostgreSQL Logical Streaming Dashboard</title>
+  <title>PostgreSQL PITR Dashboard</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg-body: #f8fafc;
+      --bg-0: #f0f7f6;
+      --bg-1: #e6f2f0;
       --bg-card: #ffffff;
-      --border-color: #e2e8f0;
-      --border-hover: #cbd5e1;
-      
-      --primary: #4f46e5;
-      --primary-hover: #4338ca;
-      --primary-light: #eef2ff;
-
-      --op-insert-bg: #dcfce7;
-      --op-insert-border: #86efac;
-      --op-insert-text: #15803d;
-
-      --op-update-bg: #fef3c7;
-      --op-update-border: #fde047;
-      --op-update-text: #b45309;
-
-      --op-delete-bg: #fee2e2;
-      --op-delete-border: #fca5a5;
-      --op-delete-text: #b91c1c;
-
-      --op-tx-bg: #e0f2fe;
-      --op-tx-border: #7dd3fc;
-      --op-tx-text: #0369a1;
-
-      --text-dark: #0f172a;
-      --text-muted: #64748b;
-      
-      --font-main: 'Inter', sans-serif;
-      --font-code: 'Fira Code', monospace;
-      --shadow-sm: 0 1px 3px rgba(0,0,0,0.05);
-      --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.07), 0 2px 4px -1px rgba(0,0,0,0.04);
-      --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.08), 0 4px 6px -2px rgba(0,0,0,0.04);
+      --border-color: #d0e3df;
+      --primary: #0f766e;
+      --primary-hover: #115e59;
+      --primary-light: #ccfbf1;
+      --text-dark: #0c1f1c;
+      --text-muted: #5a726c;
+      --ok-bg: #dcfce7;
+      --ok-border: #86efac;
+      --ok-text: #15803d;
+      --warn-bg: #fffbeb;
+      --warn-border: #fcd34d;
+      --warn-text: #b45309;
+      --err-bg: #fee2e2;
+      --err-border: #fca5a5;
+      --err-text: #b91c1c;
+      --font-main: 'DM Sans', system-ui, sans-serif;
+      --font-code: 'IBM Plex Mono', ui-monospace, monospace;
+      --shadow-sm: 0 4px 24px rgba(15, 61, 54, 0.06);
+      --shadow-lg: 0 16px 40px rgba(15, 61, 54, 0.12);
+      --radius: 18px;
     }
 
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
-      background: var(--bg-body);
+      background:
+        radial-gradient(ellipse 80% 50% at 10% -10%, rgba(94, 234, 212, 0.35), transparent 55%),
+        radial-gradient(ellipse 60% 40% at 100% 0%, rgba(15, 118, 110, 0.12), transparent 50%),
+        linear-gradient(180deg, var(--bg-0) 0%, var(--bg-1) 100%);
       color: var(--text-dark);
       font-family: var(--font-main);
       min-height: 100vh;
-      padding: 2rem 1.5rem;
+      padding: 1.75rem 1.25rem 3rem;
     }
 
-    .container {
-      max-width: 1280px;
-      margin: 0 auto;
-    }
+    .container { max-width: 1100px; margin: 0 auto; }
 
-    /* Clean Light Navigation Header */
     header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 2rem;
-      padding: 1.2rem 1.6rem;
-      background: var(--bg-card);
+      margin-bottom: 1.5rem;
+      padding: 1.1rem 1.4rem;
+      background: rgba(255,255,255,0.85);
+      backdrop-filter: blur(12px);
       border: 1px solid var(--border-color);
-      border-radius: 16px;
+      border-radius: var(--radius);
       box-shadow: var(--shadow-sm);
       flex-wrap: wrap;
       gap: 1rem;
     }
 
-    .brand-area {
-      display: flex;
-      align-items: center;
-      gap: 1rem;
-    }
+    .brand-area { display: flex; align-items: center; gap: 0.9rem; }
 
     .brand-icon {
-      background: var(--primary-light);
-      color: var(--primary);
-      width: 44px;
-      height: 44px;
-      border-radius: 12px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 1rem;
-      font-weight: 800;
-      border: 1px solid #c7d2fe;
+      width: 46px; height: 46px;
+      border-radius: 14px;
+      background: linear-gradient(145deg, var(--primary) 0%, var(--primary-hover) 100%);
+      color: #fff;
+      display: grid; place-items: center;
+      font-size: 0.85rem; font-weight: 800;
+      box-shadow: 0 8px 20px rgba(15, 118, 110, 0.28);
     }
 
     .title-group h1 {
-      font-size: 1.4rem;
-      font-weight: 700;
-      color: var(--text-dark);
-      letter-spacing: -0.3px;
+      font-size: 1.25rem; font-weight: 800; letter-spacing: -0.03em;
     }
-
     .title-group .sub {
-      font-size: 0.85rem;
-      color: var(--text-muted);
-      margin-top: 0.15rem;
+      font-size: 0.82rem; color: var(--text-muted); margin-top: 0.15rem;
     }
 
-    .nav-actions {
-      display: flex;
-      align-items: center;
-      gap: 0.8rem;
-    }
+    .nav-actions { display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap; }
 
     .nav-link-btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.4rem;
-      background: var(--primary-light);
-      border: 1px solid #c7d2fe;
-      color: var(--primary);
-      padding: 0.5rem 1.1rem;
-      border-radius: 10px;
+      display: inline-flex; align-items: center; gap: 0.35rem;
+      background: #fff;
+      border: 1px solid var(--border-color);
+      color: var(--text-dark);
+      padding: 0.5rem 1rem;
+      border-radius: 999px;
       text-decoration: none;
-      font-weight: 600;
-      font-size: 0.85rem;
-      transition: all 0.2s ease;
+      font-weight: 600; font-size: 0.84rem;
+      transition: 0.15s ease;
     }
-
-    .nav-link-btn:hover {
+    .nav-link-btn:hover { border-color: var(--primary); color: var(--primary); }
+    .nav-link-btn.featured {
       background: var(--primary);
-      color: #ffffff;
       border-color: var(--primary);
+      color: #fff;
     }
+    .nav-link-btn.featured:hover { background: var(--primary-hover); color: #fff; }
 
     .status-pill {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      background: var(--op-insert-bg);
-      border: 1px solid var(--op-insert-border);
-      color: var(--op-insert-text);
-      padding: 0.45rem 1.1rem;
-      border-radius: 30px;
-      font-size: 0.85rem;
-      font-weight: 600;
+      display: flex; align-items: center; gap: 0.5rem;
+      padding: 0.45rem 1rem;
+      border-radius: 999px;
+      font-size: 0.84rem; font-weight: 600;
+      background: var(--ok-bg); border: 1px solid var(--ok-border); color: var(--ok-text);
     }
-
+    .status-pill.offline {
+      background: var(--err-bg); border-color: var(--err-border); color: var(--err-text);
+    }
     .pulse-dot {
-      width: 8px;
-      height: 8px;
-      background: var(--op-insert-text);
-      border-radius: 50%;
-      animation: pulse 1.8s infinite ease-in-out;
+      width: 8px; height: 8px; border-radius: 50%;
+      background: currentColor;
+      animation: pulse 1.6s ease-in-out infinite;
     }
-
     @keyframes pulse {
-      0% { opacity: 0.4; transform: scale(0.9); }
-      50% { opacity: 1; transform: scale(1.1); }
-      100% { opacity: 0.4; transform: scale(0.9); }
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.35; }
     }
 
-    /* Metric Cards Grid */
+    .hero-strip {
+      display: grid;
+      grid-template-columns: 1.4fr 1fr;
+      gap: 1rem;
+      margin-bottom: 1.35rem;
+    }
+    @media (max-width: 800px) {
+      .hero-strip { grid-template-columns: 1fr; }
+    }
+
+    .hero-card {
+      position: relative;
+      overflow: hidden;
+      border-radius: 22px;
+      padding: 1.5rem 1.6rem;
+      background: linear-gradient(135deg, #0f3d38 0%, #0f766e 55%, #14b8a6 100%);
+      color: #ecfdf5;
+      box-shadow: var(--shadow-lg);
+    }
+    .hero-card::after {
+      content: '';
+      position: absolute;
+      right: -30px; top: -30px;
+      width: 160px; height: 160px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.08);
+    }
+    .hero-card h2 {
+      font-size: 1.35rem; font-weight: 800; letter-spacing: -0.03em;
+      margin-bottom: 0.45rem; position: relative; z-index: 1;
+    }
+    .hero-card p {
+      font-size: 0.9rem; line-height: 1.5; opacity: 0.9;
+      max-width: 42ch; position: relative; z-index: 1;
+    }
+
+    .setup-cta {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 1rem;
+      border-radius: 22px;
+      padding: 1.4rem 1.5rem;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      box-shadow: var(--shadow-sm);
+    }
+    .setup-cta h3 {
+      font-size: 1.05rem; font-weight: 800; letter-spacing: -0.02em;
+      margin-bottom: 0.35rem;
+    }
+    .setup-cta p {
+      font-size: 0.86rem; color: var(--text-muted); line-height: 1.45;
+    }
+    .setup-cta .cta-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.4rem;
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 0.9rem;
+      padding: 0.7rem 1.1rem;
+      border-radius: 12px;
+      background: var(--primary);
+      color: #fff;
+      transition: 0.15s ease;
+    }
+    .setup-cta .cta-btn:hover { background: var(--primary-hover); }
+
     .metrics-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 1.2rem;
-      margin-bottom: 1.8rem;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 0.85rem;
+      margin-bottom: 1.25rem;
     }
 
     .card {
       background: var(--bg-card);
       border: 1px solid var(--border-color);
-      border-radius: 14px;
-      padding: 1.3rem;
+      border-radius: 16px;
+      padding: 1.05rem 1.15rem;
       box-shadow: var(--shadow-sm);
-      transition: all 0.2s ease;
+      transition: transform 0.15s ease, border-color 0.15s ease;
     }
-
     .card:hover {
       transform: translateY(-2px);
-      box-shadow: var(--shadow-md);
-      border-color: var(--border-hover);
+      border-color: #9cc4bc;
     }
-
     .card-label {
-      font-size: 0.78rem;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      color: var(--text-muted);
-      margin-bottom: 0.5rem;
-      font-weight: 600;
+      font-size: 0.72rem; font-weight: 700;
+      color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;
+      margin-bottom: 0.4rem;
     }
-
     .card-value {
-      font-size: 1.8rem;
-      font-weight: 800;
-      color: var(--text-dark);
+      font-size: 1.25rem; font-weight: 700;
+      font-family: var(--font-code);
+      word-break: break-all;
     }
+    .card-value.muted { font-size: 0.9rem; font-weight: 600; color: var(--text-muted); }
 
-    /* Toolbar Controls */
-    .toolbar {
+    .panel {
       background: var(--bg-card);
       border: 1px solid var(--border-color);
-      border-radius: 14px;
-      padding: 1.1rem 1.4rem;
-      margin-bottom: 1.5rem;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: 1.2rem;
+      border-radius: var(--radius);
+      padding: 1.35rem 1.45rem;
       box-shadow: var(--shadow-sm);
+      margin-bottom: 1.25rem;
+    }
+    .panel h2 {
+      font-size: 1.1rem; font-weight: 800; letter-spacing: -0.02em; margin-bottom: 0.3rem;
+    }
+    .panel .hint {
+      font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.1rem; line-height: 1.45;
     }
 
-    .filter-group {
-      display: flex;
-      gap: 0.4rem;
-      align-items: center;
-      flex-wrap: wrap;
+    .form-row {
+      display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: flex-end;
+      margin-bottom: 1rem;
     }
-
-    .pill-btn {
-      background: #f1f5f9;
-      border: 1px solid var(--border-color);
-      color: var(--text-muted);
-      padding: 0.4rem 0.9rem;
-      border-radius: 20px;
-      font-size: 0.82rem;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.2s ease;
+    .field { display: flex; flex-direction: column; gap: 0.35rem; flex: 1; min-width: 180px; }
+    .field label {
+      font-size: 0.78rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em;
     }
-
-    .pill-btn:hover {
-      background: #e2e8f0;
-      color: var(--text-dark);
-    }
-
-    .pill-btn.active {
-      background: var(--primary);
-      border-color: var(--primary);
-      color: #ffffff;
-    }
-
-    .pill-btn.active.insert { background: var(--op-insert-text); border-color: var(--op-insert-text); color: #ffffff; }
-    .pill-btn.active.update { background: var(--op-update-text); border-color: var(--op-update-text); color: #ffffff; }
-    .pill-btn.active.delete { background: var(--op-delete-text); border-color: var(--op-delete-text); color: #ffffff; }
-
-    .date-input {
-      background: #ffffff;
-      border: 1px solid var(--border-color);
-      color: var(--text-dark);
-      padding: 0.4rem 0.6rem;
-      border-radius: 8px;
-      font-family: var(--font-main);
-      font-size: 0.82rem;
-    }
-
-    .btn-primary {
-      background: var(--primary);
-      color: #ffffff;
-      border: none;
-      padding: 0.6rem 1.3rem;
-      border-radius: 10px;
-      font-weight: 600;
-      font-size: 0.88rem;
-      cursor: pointer;
-      transition: all 0.2s ease;
-      box-shadow: var(--shadow-sm);
-    }
-
-    .btn-primary:hover {
-      background: var(--primary-hover);
-      transform: translateY(-1px);
-      box-shadow: var(--shadow-md);
-    }
-
-    .btn-secondary {
-      background: #ffffff;
-      border: 1px solid var(--border-color);
-      color: var(--text-dark);
-      padding: 0.45rem 0.9rem;
-      border-radius: 8px;
-      font-weight: 600;
-      font-size: 0.82rem;
-      cursor: pointer;
-      transition: all 0.2s ease;
-    }
-
-    .btn-secondary:hover {
-      background: #f1f5f9;
-      border-color: var(--border-hover);
-    }
-
-    .btn-restore {
-      background: var(--primary-light);
-      border: 1px solid #c7d2fe;
-      color: var(--primary);
-      padding: 0.35rem 0.85rem;
-      border-radius: 8px;
-      font-size: 0.8rem;
-      font-weight: 700;
-      cursor: pointer;
-      transition: all 0.2s ease;
-    }
-
-    .btn-restore:hover {
-      background: var(--primary);
-      color: #ffffff;
-      border-color: var(--primary);
-    }
-
-    .pagination-bar {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      background: var(--bg-card);
+    .field input {
+      background: #fff;
       border: 1px solid var(--border-color);
       border-radius: 12px;
-      padding: 0.8rem 1.2rem;
-      margin-bottom: 1.5rem;
-      font-size: 0.85rem;
-      box-shadow: var(--shadow-sm);
-      flex-wrap: wrap;
-      gap: 0.8rem;
-    }
-
-    /* Event Feed */
-    .feed-container {
-      display: flex;
-      flex-direction: column;
-      gap: 1rem;
-    }
-
-    .event-card {
-      background: var(--bg-card);
-      border: 1px solid var(--border-color);
-      border-radius: 14px;
-      padding: 1.3rem;
-      display: flex;
-      flex-direction: column;
-      gap: 0.85rem;
-      box-shadow: var(--shadow-sm);
-      transition: all 0.2s ease;
-    }
-
-    .event-card:hover {
-      border-color: var(--border-hover);
-      box-shadow: var(--shadow-md);
-    }
-
-    .event-card.op-insert { border-left: 5px solid var(--op-insert-text); }
-    .event-card.op-update { border-left: 5px solid var(--op-update-text); }
-    .event-card.op-delete { border-left: 5px solid var(--op-delete-text); }
-    .event-card.op-tx { border-left: 5px solid var(--op-tx-text); }
-
-    .event-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: 0.6rem;
-    }
-
-    .badge-op {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.4rem;
-      padding: 0.25rem 0.75rem;
-      border-radius: 20px;
-      font-size: 0.78rem;
-      font-weight: 700;
-      text-transform: uppercase;
-    }
-
-    .badge-op.insert { background: var(--op-insert-bg); border: 1px solid var(--op-insert-border); color: var(--op-insert-text); }
-    .badge-op.update { background: var(--op-update-bg); border: 1px solid var(--op-update-border); color: var(--op-update-text); }
-    .badge-op.delete { background: var(--op-delete-bg); border: 1px solid var(--op-delete-border); color: var(--op-delete-text); }
-    .badge-op.tx { background: var(--op-tx-bg); border: 1px solid var(--op-tx-border); color: var(--op-tx-text); }
-
-    .lsn-pill {
-      font-family: var(--font-code);
-      background: #f1f5f9;
-      border: 1px solid var(--border-color);
-      padding: 0.25rem 0.65rem;
-      border-radius: 6px;
-      font-size: 0.82rem;
-      color: var(--text-dark);
-      font-weight: 600;
-    }
-
-    .time-pill {
-      font-family: var(--font-code);
-      background: #f8fafc;
-      border: 1px solid var(--border-color);
-      padding: 0.25rem 0.65rem;
-      border-radius: 6px;
-      font-size: 0.82rem;
-      color: var(--text-muted);
-      font-weight: 500;
-    }
-
-    .event-body {
+      padding: 0.6rem 0.9rem;
       font-family: var(--font-code);
       font-size: 0.88rem;
-      background: #f8fafc;
-      padding: 1rem 1.2rem;
-      border-radius: 10px;
-      color: #1e293b;
-      overflow-x: auto;
-      line-height: 1.5;
+      color: var(--text-dark);
+    }
+    .field input:focus {
+      outline: none; border-color: var(--primary);
+      box-shadow: 0 0 0 3px var(--primary-light);
+    }
+
+    .btn-primary, .btn-secondary {
+      border: none; border-radius: 12px;
+      padding: 0.6rem 1.15rem;
+      font-weight: 700; font-size: 0.88rem;
+      cursor: pointer; font-family: var(--font-main);
+      transition: 0.15s ease;
+    }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-primary:hover { background: var(--primary-hover); }
+    .btn-secondary {
+      background: #fff; color: var(--text-dark);
       border: 1px solid var(--border-color);
     }
+    .btn-secondary:hover { border-color: var(--primary); color: var(--primary); }
 
-    .highlight-table { color: #d97706; font-weight: 700; }
-    .highlight-kw { color: #2563eb; font-weight: 700; }
-
-    .empty-feed {
-      text-align: center;
-      padding: 3.5rem 1.5rem;
-      color: var(--text-muted);
-      background: var(--bg-card);
-      border: 1px dashed var(--border-color);
+    .warn-banner {
+      display: none;
+      background: var(--warn-bg);
+      border: 1px solid var(--warn-border);
+      color: var(--warn-text);
       border-radius: 14px;
-      font-size: 0.95rem;
+      padding: 0.9rem 1.1rem;
+      font-size: 0.88rem;
+      margin-bottom: 1.25rem;
+      font-weight: 500;
+      line-height: 1.45;
+    }
+    .warn-banner.show { display: block; }
+
+    .detail-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.5rem 1.25rem;
+    }
+    @media (max-width: 720px) {
+      .detail-grid { grid-template-columns: 1fr; }
+    }
+    .detail-item {
+      font-size: 0.88rem;
+      padding: 0.7rem 0;
+      border-bottom: 1px solid var(--border-color);
+    }
+    .detail-item .k {
+      color: var(--text-muted); font-weight: 700; font-size: 0.72rem;
+      text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    .detail-item .v {
+      font-family: var(--font-code); margin-top: 0.25rem; word-break: break-all;
     }
 
-    /* Modal Styling */
     .modal {
       display: none;
       position: fixed;
       top: 0; left: 0; right: 0; bottom: 0;
-      background: rgba(15, 23, 42, 0.6);
+      background: rgba(12, 31, 28, 0.55);
       backdrop-filter: blur(6px);
       z-index: 1000;
-      align-items: center;
-      justify-content: center;
+      align-items: center; justify-content: center;
+      padding: 1rem;
     }
-
     .modal-content {
-      background: #ffffff;
+      background: #fff;
       border: 1px solid var(--border-color);
-      border-radius: 18px;
-      padding: 2rem;
-      max-width: 500px;
-      width: 90%;
+      border-radius: 20px;
+      padding: 1.75rem;
+      max-width: 500px; width: 100%;
       box-shadow: var(--shadow-lg);
     }
-
     .radio-card {
-      display: flex;
-      align-items: flex-start;
-      gap: 0.8rem;
+      display: flex; align-items: flex-start; gap: 0.8rem;
       cursor: pointer;
-      background: #f8fafc;
+      background: #f4faf8;
       padding: 1rem;
-      border-radius: 12px;
+      border-radius: 14px;
       border: 1px solid var(--border-color);
-      transition: all 0.2s ease;
+      transition: 0.15s ease;
     }
-
-    .radio-card:hover {
-      border-color: var(--primary);
-      background: var(--primary-light);
-    }
+    .radio-card:hover { border-color: var(--primary); background: var(--primary-light); }
   </style>
 </head>
 <body>
   <div class="container">
     <header>
       <div class="brand-area">
-        <div class="brand-icon">DB</div>
+        <div class="brand-icon">PG</div>
         <div class="title-group">
-          <h1>Logical Streaming & Recovery System</h1>
-          <div class="sub">Enterprise PostgreSQL Point-in-Time Recovery & Real-Time Logical Streamer</div>
+          <h1>PostgreSQL PITR Dashboard</h1>
+          <div class="sub">WAL archive health, backups, and point-in-time recovery</div>
         </div>
       </div>
       <div class="nav-actions">
+        <a href="/setup.html" class="nav-link-btn featured">Compose &amp; Setup</a>
         <a href="/docs.html" class="nav-link-btn">Docs</a>
-        <div class="status-pill">
+        <div class="status-pill" id="statusPill">
           <div class="pulse-dot"></div>
-          <span id="slotStatus">Stream Active</span>
+          <span id="dbStatusLabel">Checking…</span>
         </div>
       </div>
     </header>
 
-    <!-- Stat Cards -->
+    <div class="hero-strip">
+      <div class="hero-card">
+        <h2>Monitor WAL. Recover with confidence.</h2>
+        <p>Live LSN, archive status, and pgBackRest backups — without logical replication slots that can fill the disk.</p>
+      </div>
+      <div class="setup-cta">
+        <div>
+          <h3>Docker Compose &amp; postgres/</h3>
+          <p>Copy the compose structure (no secrets), browse config files, and see how volumes and archiving fit together.</p>
+        </div>
+        <a class="cta-btn" href="/setup.html">Open setup guide →</a>
+      </div>
+    </div>
+
+    <div class="warn-banner" id="slotWarning"></div>
+
     <div class="metrics-grid">
       <div class="card">
-        <div class="card-label">Total Decoded Changes</div>
-        <div class="card-value" id="totalCount">0</div>
+        <div class="card-label">Database</div>
+        <div class="card-value" id="dbOnlineValue">—</div>
       </div>
       <div class="card">
-        <div class="card-label">Inserts</div>
-        <div class="card-value" id="insertCount" style="color: var(--op-insert-text);">0</div>
+        <div class="card-label">Current LSN</div>
+        <div class="card-value" id="currentLsnValue" style="font-size: 0.95rem;">—</div>
       </div>
       <div class="card">
-        <div class="card-label">Updates</div>
-        <div class="card-value" id="updateCount" style="color: var(--op-update-text);">0</div>
+        <div class="card-label">pg_wal Size</div>
+        <div class="card-value" id="walSizeValue">—</div>
       </div>
       <div class="card">
-        <div class="card-label">Deletes</div>
-        <div class="card-value" id="deleteCount" style="color: var(--op-delete-text);">0</div>
+        <div class="card-label">Archive Failures</div>
+        <div class="card-value" id="archiveFailValue">—</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Backups</div>
+        <div class="card-value" id="backupCountValue">—</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Last Backup</div>
+        <div class="card-value muted" id="lastBackupValue">—</div>
       </div>
     </div>
 
-    <!-- Toolbar Filters -->
-    <div class="toolbar">
-      <div class="filter-group">
-        <span class="filter-label">Filter:</span>
-        <button class="pill-btn active" onclick="setOpFilter('ALL', this)">All</button>
-        <button class="pill-btn" onclick="setOpFilter('INSERT', this)">INSERT</button>
-        <button class="pill-btn" onclick="setOpFilter('UPDATE', this)">UPDATE</button>
-        <button class="pill-btn" onclick="setOpFilter('DELETE', this)">DELETE</button>
-      </div>
-
-      <div style="display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap;">
-        <label style="font-size: 0.82rem; color: var(--text-muted); font-weight: 600;">Start:</label>
-        <input type="datetime-local" id="start-date" class="date-input">
-        <label style="font-size: 0.82rem; color: var(--text-muted); font-weight: 600;">End:</label>
-        <input type="datetime-local" id="end-date" class="date-input">
-        <button class="btn-secondary" onclick="applyFilter()">Filter Date</button>
-        <button class="btn-secondary" onclick="clearFilter()">Clear</button>
-        <button class="btn-primary" id="initBtn">Init Replication Slot</button>
-      </div>
-    </div>
-
-    <!-- Pagination Controls -->
-    <div class="pagination-bar">
-      <div style="display: flex; gap: 0.5rem; align-items: center;">
-        <span style="color: var(--text-muted);">Items per page:</span>
-        <select id="limit-select" onchange="changeLimit()" style="background: #ffffff; border: 1px solid var(--border-color); color: var(--text-dark); padding: 0.35rem 0.65rem; border-radius: 8px;">
-          <option value="10">10</option>
-          <option value="25">25</option>
-          <option value="50" selected>50</option>
-          <option value="100">100</option>
-        </select>
-      </div>
-      <div style="display: flex; gap: 1rem; align-items: center;">
-        <button id="btn-prev" class="btn-secondary" onclick="prevPage()" disabled>&laquo; Prev</button>
-        <span id="pageInfo" style="font-family: var(--font-code); color: var(--primary); font-weight: 600;">Page 1 of 1 (0 events)</span>
-        <button id="btn-next" class="btn-secondary" onclick="nextPage()" disabled>Next &raquo;</button>
+    <div class="panel">
+      <h2>Archive &amp; Slot Detail</h2>
+      <div class="hint">Monitors pgBackRest WAL archiving. No logical replication slots are used by this dashboard.</div>
+      <div class="detail-grid">
+        <div class="detail-item">
+          <div class="k">Last archived WAL</div>
+          <div class="v" id="lastArchivedWal">—</div>
+        </div>
+        <div class="detail-item">
+          <div class="k">Last archived time</div>
+          <div class="v" id="lastArchivedTime">—</div>
+        </div>
+        <div class="detail-item">
+          <div class="k">Last failed WAL</div>
+          <div class="v" id="lastFailedWal">—</div>
+        </div>
+        <div class="detail-item">
+          <div class="k">Replication slots</div>
+          <div class="v" id="slotCountValue">—</div>
+        </div>
       </div>
     </div>
 
-    <!-- Feed Container -->
-    <div class="feed-container" id="feed">
-      <div class="empty-feed">Listening for unread logical decoding changes...</div>
+    <div class="panel">
+      <h2>Point-in-Time Recovery</h2>
+      <div class="hint">Prefer a timestamp. Optionally set an LSN (takes precedence when filled), or use the current LSN.</div>
+      <div class="form-row">
+        <div class="field">
+          <label for="restoreTimestamp">Target timestamp</label>
+          <input type="datetime-local" id="restoreTimestamp" step="1">
+        </div>
+        <div class="field">
+          <label for="restoreLsn">Target LSN (optional)</label>
+          <input type="text" id="restoreLsn" placeholder="e.g. 0/1A2B3C0" autocomplete="off">
+        </div>
+      </div>
+      <div style="display: flex; gap: 0.7rem; flex-wrap: wrap;">
+        <button class="btn-secondary" type="button" onclick="useCurrentLsn()">Use current LSN</button>
+        <button class="btn-primary" type="button" onclick="openRestoreModal()">Restore…</button>
+      </div>
     </div>
   </div>
 
-  <!-- Restore Modal -->
   <div id="restoreModal" class="modal">
     <div class="modal-content">
-      <h3 style="margin-bottom: 0.5rem; font-size: 1.3rem; font-weight: 700; color: var(--text-dark);">Point-in-Time Recovery</h3>
-      <p id="targetLsnDisplay" style="font-family: var(--font-code); color: var(--primary); margin-bottom: 1.3rem; font-weight: 600;"></p>
-      
+      <h3 style="margin-bottom: 0.5rem; font-size: 1.25rem; font-weight: 800;">Point-in-Time Recovery</h3>
+      <p id="targetDisplay" style="font-family: var(--font-code); color: var(--primary); margin-bottom: 1.3rem; font-weight: 600;"></p>
+
       <div style="display: flex; flex-direction: column; gap: 0.8rem; margin-bottom: 1.5rem;">
         <label class="radio-card">
           <input type="radio" name="restoreMode" id="modeCluster" value="cluster" checked style="margin-top: 0.2rem;">
           <div>
-            <strong style="color: var(--text-dark); font-size: 0.92rem;">Promoted Cluster Clone (Port 5434)</strong>
-            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.15rem;">Boots standalone database clone on Port 5434 (Zero Downtime).</div>
+            <strong style="font-size: 0.92rem;">Promoted Cluster Clone (Port 5434)</strong>
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.15rem;">Standalone clone — zero downtime on primary.</div>
           </div>
         </label>
-
         <label class="radio-card">
           <input type="radio" name="restoreMode" id="modeInplace" value="inplace" style="margin-top: 0.2rem;">
           <div>
-            <strong style="color: var(--text-dark); font-size: 0.92rem;">In-Place Restore (Port 5433)</strong>
-            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.15rem;">Overwrites production database directly in-place.</div>
+            <strong style="font-size: 0.92rem;">In-Place Restore</strong>
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.15rem;">Overwrites the production database (downtime).</div>
           </div>
         </label>
       </div>
@@ -587,226 +478,90 @@
   </div>
 
   <script>
-    const feed = document.getElementById('feed');
-    const totalCount = document.getElementById('totalCount');
-    const insertCount = document.getElementById('insertCount');
-    const updateCount = document.getElementById('updateCount');
-    const deleteCount = document.getElementById('deleteCount');
-    const initBtn = document.getElementById('initBtn');
-    const pageInfo = document.getElementById('pageInfo');
-    const btnPrev = document.getElementById('btn-prev');
-    const btnNext = document.getElementById('btn-next');
+    let latestStatus = null;
+    let pendingTarget = null;
+    let pendingKind = null;
 
-    let currentPage = 1;
-    let currentLimit = 50;
-    let totalPages = 1;
-    let selectedLsn = '';
-    let activeFilter = 'ALL';
-    let rawEvents = [];
-    let isFetching = false;
-
-    async function fetchLogicalEvents() {
-      if (isFetching) return;
-      isFetching = true;
+    async function fetchStatus() {
       try {
-        const startDate = document.getElementById('start-date').value;
-        const endDate = document.getElementById('end-date').value;
-
-        let url = `/api/wal/logical?page=${currentPage}&limit=${currentLimit}`;
-        if (startDate) url += `&start_date=${encodeURIComponent(startDate)}`;
-        if (endDate) url += `&end_date=${encodeURIComponent(endDate)}`;
-
-        const res = await fetch(url);
+        const res = await fetch('/api/status');
         const data = await res.json();
-        
-        if (data) {
-          currentPage = data.page || 1;
-          totalPages = data.totalPages || 1;
-          const total = data.total || 0;
-          totalCount.textContent = total;
-
-          pageInfo.textContent = `Page ${currentPage} of ${totalPages} (${total} events)`;
-          btnPrev.disabled = (currentPage <= 1);
-          btnNext.disabled = (currentPage >= totalPages);
-
-          if (!data.events || data.events.length === 0) {
-            feed.innerHTML = '<div class="empty-feed">Listening for unread logical decoding changes...</div>';
-            insertCount.textContent = '0';
-            updateCount.textContent = '0';
-            deleteCount.textContent = '0';
-            return;
-          }
-
-          rawEvents = data.events;
-          updateCounters(data.metrics, rawEvents);
-          renderEvents();
-        }
+        if (data.error) throw new Error(data.error);
+        latestStatus = data;
+        renderStatus(data);
       } catch (err) {
-        console.error("Error fetching logical events:", err);
-      } finally {
-        isFetching = false;
+        console.error('Status fetch failed:', err);
+        document.getElementById('dbStatusLabel').textContent = 'Offline';
+        document.getElementById('statusPill').classList.add('offline');
+        document.getElementById('dbOnlineValue').textContent = 'Offline';
       }
     }
 
-    function updateCounters(metrics, events) {
-      if (metrics) {
-        insertCount.textContent = metrics.inserts || 0;
-        updateCount.textContent = metrics.updates || 0;
-        deleteCount.textContent = metrics.deletes || 0;
+    function renderStatus(data) {
+      const online = !!data.dbOnline;
+      const pill = document.getElementById('statusPill');
+      document.getElementById('dbStatusLabel').textContent = online ? 'DB Online' : 'DB Offline';
+      pill.classList.toggle('offline', !online);
+      document.getElementById('dbOnlineValue').textContent = online ? 'Online' : 'Offline';
+      document.getElementById('currentLsnValue').textContent = data.currentLsn || '—';
+      document.getElementById('walSizeValue').textContent = (data.wal && data.wal.human) || '—';
+      document.getElementById('archiveFailValue').textContent =
+        data.archiver ? String(data.archiver.failedCount ?? 0) : '—';
+      document.getElementById('backupCountValue').textContent =
+        data.backups ? String(data.backups.count ?? 0) : '—';
+      document.getElementById('lastBackupValue').textContent =
+        (data.backups && data.backups.lastStopIso)
+          ? new Date(data.backups.lastStopIso).toLocaleString()
+          : '—';
+
+      document.getElementById('lastArchivedWal').textContent =
+        (data.archiver && data.archiver.lastArchivedWal) || '—';
+      document.getElementById('lastArchivedTime').textContent =
+        (data.archiver && data.archiver.lastArchivedTime) || '—';
+      document.getElementById('lastFailedWal').textContent =
+        (data.archiver && data.archiver.lastFailedWal) || '—';
+      document.getElementById('slotCountValue').textContent =
+        data.slots ? String(data.slots.count ?? 0) : '0';
+
+      const warn = document.getElementById('slotWarning');
+      if (data.slots && data.slots.warning) {
+        const names = (data.slots.items || []).map(s => s.name).join(', ');
+        warn.textContent = data.slots.warning + (names ? ' Slots: ' + names : '');
+        warn.classList.add('show');
+      } else {
+        warn.classList.remove('show');
+      }
+    }
+
+    function useCurrentLsn() {
+      if (latestStatus && latestStatus.currentLsn) {
+        document.getElementById('restoreLsn').value = latestStatus.currentLsn;
+      } else {
+        alert('Current LSN not available yet. Wait for status refresh.');
+      }
+    }
+
+    function toPgTimestamp(localValue) {
+      if (!localValue) return '';
+      return localValue.replace('T', ' ') + (localValue.length === 16 ? ':00' : '');
+    }
+
+    function openRestoreModal() {
+      const lsn = document.getElementById('restoreLsn').value.trim();
+      const ts = toPgTimestamp(document.getElementById('restoreTimestamp').value);
+      if (lsn) {
+        pendingTarget = lsn;
+        pendingKind = 'lsn';
+      } else if (ts) {
+        pendingTarget = ts;
+        pendingKind = 'timestamp';
+      } else {
+        alert('Enter a target timestamp or LSN.');
         return;
       }
-      let ins = 0, upd = 0, del = 0;
-      if (events) {
-        events.forEach(ev => {
-          const text = ev.data.toUpperCase();
-          if (text.includes('INSERT:')) ins++;
-          else if (text.includes('UPDATE:')) upd++;
-          else if (text.includes('DELETE:')) del++;
-        });
-      }
-      insertCount.textContent = ins;
-      updateCount.textContent = upd;
-      deleteCount.textContent = del;
-    }
-
-    function setOpFilter(filterType, element) {
-      activeFilter = filterType;
-      document.querySelectorAll('.pill-btn').forEach(btn => btn.classList.remove('active', 'insert', 'update', 'delete'));
-      element.classList.add('active');
-      if (filterType === 'INSERT') element.classList.add('insert');
-      if (filterType === 'UPDATE') element.classList.add('update');
-      if (filterType === 'DELETE') element.classList.add('delete');
-      renderEvents();
-    }
-
-    function applyFilter() {
-      currentPage = 1;
-      fetchLogicalEvents();
-    }
-
-    function clearFilter() {
-      document.getElementById('start-date').value = '';
-      document.getElementById('end-date').value = '';
-      currentPage = 1;
-      fetchLogicalEvents();
-    }
-
-    function renderEvents() {
-      const filtered = rawEvents.filter(ev => {
-        const text = ev.data.toUpperCase();
-        if (activeFilter === 'INSERT' && !text.includes('INSERT:')) return false;
-        if (activeFilter === 'UPDATE' && !text.includes('UPDATE:')) return false;
-        if (activeFilter === 'DELETE' && !text.includes('DELETE:')) return false;
-        return true;
-      });
-
-      if (filtered.length === 0) {
-        feed.innerHTML = `<div class="empty-feed">No ${activeFilter} transactions found in current feed.</div>`;
-        return;
-      }
-
-      feed.innerHTML = '';
-      filtered.forEach(ev => {
-        const card = document.createElement('div');
-        const text = ev.data;
-        const upper = text.toUpperCase();
-
-        let opClass = 'op-tx';
-        let badgeClass = 'tx';
-        let opLabel = 'TRANSACTION';
-
-        if (upper.includes('INSERT:')) {
-          opClass = 'op-insert';
-          badgeClass = 'insert';
-          opLabel = 'INSERT';
-        } else if (upper.includes('UPDATE:')) {
-          opClass = 'op-update';
-          badgeClass = 'update';
-          opLabel = 'UPDATE';
-        } else if (upper.includes('DELETE:')) {
-          opClass = 'op-delete';
-          badgeClass = 'delete';
-          opLabel = 'DELETE';
-        } else if (upper.includes('COMMIT')) {
-          opLabel = 'COMMIT';
-        } else if (upper.includes('BEGIN')) {
-          opLabel = 'BEGIN';
-        }
-
-        card.className = `event-card ${opClass}`;
-
-        card.innerHTML = `
-          <div class="event-header">
-            <div style="display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap;">
-              <span class="badge-op ${badgeClass}">${opLabel}</span>
-              <span class="lsn-pill">LSN: ${ev.lsn}</span>
-              ${ev.timestamp ? `<span class="time-pill">🕒 ${ev.timestamp}</span>` : ''}
-            </div>
-            <div style="display: flex; gap: 0.5rem; align-items: center;">
-              <button class="btn-secondary" style="padding: 0.3rem 0.7rem; font-size: 0.78rem;" onclick="navigator.clipboard.writeText('${ev.lsn}'); alert('LSN ${ev.lsn} copied to clipboard!')">Copy LSN</button>
-              <button class="btn-restore" onclick="openRestoreModal('${ev.lsn}')">Restore to LSN</button>
-            </div>
-          </div>
-          <div class="event-body">${formatSqlData(text)}</div>
-        `;
-        feed.appendChild(card);
-      });
-    }
-
-    function formatIstTime(ts) {
-      if (!ts) return '';
-      try {
-        const cleanTs = ts.trim().replace(' ', 'T');
-        const isoTs = cleanTs.includes('Z') || cleanTs.includes('+') ? cleanTs : cleanTs + 'Z';
-        const d = new Date(isoTs);
-        if (isNaN(d.getTime())) return ts;
-        return d.toLocaleString('en-IN', {
-          timeZone: 'Asia/Kolkata',
-          day: '2-digit',
-          month: 'short',
-          year: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit',
-          second: '2-digit',
-          hour12: true
-        }) + ' IST';
-      } catch (e) {
-        return ts;
-      }
-    }
-
-    function formatSqlData(text) {
-      let formatted = escapeHtml(text);
-      formatted = formatted.replace(/(table\s+[^\s:]+)/gi, '<span class="highlight-table">$1</span>');
-      formatted = formatted.replace(/(INSERT:|UPDATE:|DELETE:|BEGIN|COMMIT)/gi, '<span class="highlight-kw">$1</span>');
-      return formatted;
-    }
-
-    function changeLimit() {
-      currentLimit = parseInt(document.getElementById('limit-select').value, 10);
-      currentPage = 1;
-      fetchLogicalEvents();
-    }
-
-    function prevPage() {
-      if (currentPage > 1) {
-        currentPage--;
-        fetchLogicalEvents();
-      }
-    }
-
-    function nextPage() {
-      if (currentPage < totalPages) {
-        currentPage++;
-        fetchLogicalEvents();
-      }
-    }
-
-    function openRestoreModal(lsn) {
-      selectedLsn = lsn;
-      document.getElementById('targetLsnDisplay').textContent = `Target LSN: ${lsn}`;
+      document.getElementById('targetDisplay').textContent =
+        (pendingKind === 'lsn' ? 'Target LSN: ' : 'Target time: ') + pendingTarget;
       document.getElementById('restoreModal').style.display = 'flex';
-      document.getElementById('confirmRestoreBtn').onclick = triggerRestore;
     }
 
     function closeRestoreModal() {
@@ -815,47 +570,36 @@
 
     async function triggerRestore() {
       const restoreMode = document.querySelector('input[name="restoreMode"]:checked').value;
+      const body = { restoreMode };
+      if (pendingKind === 'lsn') body.lsn = pendingTarget;
+      else body.timestamp = pendingTarget;
 
+      const btn = document.getElementById('confirmRestoreBtn');
+      btn.disabled = true;
+      btn.textContent = 'Restoring…';
       try {
-        document.getElementById('confirmRestoreBtn').textContent = 'Restoring...';
         const res = await fetch('/api/restore', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ lsn: selectedLsn, restoreMode })
+          body: JSON.stringify(body)
         });
         const data = await res.json();
         if (data.success) {
-          alert(`Restore Completed Successfully (${data.mode || restoreMode})!\n\n${data.log}`);
+          alert('Restore completed (' + (data.mode || restoreMode) + ').\n\n' + (data.log || ''));
+          closeRestoreModal();
         } else {
-          alert(`Restore Failed:\n\n${data.log || data.error}`);
+          alert('Restore failed.\n\n' + (data.log || data.error || 'Unknown error'));
         }
-      } catch (err) {
+      } catch (e) {
         alert('Connection error during restore.');
       } finally {
-        closeRestoreModal();
-        document.getElementById('confirmRestoreBtn').textContent = 'Confirm Restore';
+        btn.disabled = false;
+        btn.textContent = 'Confirm Restore';
       }
     }
 
-    initBtn.addEventListener('click', async () => {
-      try {
-        initBtn.textContent = 'Initializing...';
-        const res = await fetch('/api/logical/init', { method: 'POST' });
-        const data = await res.json();
-        alert(data.message || "Initialization complete!");
-      } catch (err) {
-        alert("Failed to initialize slot: " + err.message);
-      } finally {
-        initBtn.textContent = 'Init Replication Slot';
-      }
-    });
-
-    function escapeHtml(text) {
-      return text ? text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;") : '';
-    }
-
-    fetchLogicalEvents();
-    setInterval(fetchLogicalEvents, 2000);
+    fetchStatus();
+    setInterval(fetchStatus, 5000);
   </script>
 </body>
 </html>

@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Docker Compose &amp; Postgres Setup — PITR</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-0: #f0f7f6;
+      --bg-1: #e6f2f0;
+      --card: #ffffff;
+      --border: #d0e3df;
+      --border-strong: #9cc4bc;
+      --ink: #0c1f1c;
+      --muted: #5a726c;
+      --teal: #0f766e;
+      --teal-deep: #115e59;
+      --teal-soft: #ccfbf1;
+      --teal-mid: #5eead4;
+      --amber: #b45309;
+      --amber-bg: #fffbeb;
+      --amber-border: #fcd34d;
+      --code-bg: #0f1f1c;
+      --code-fg: #e2f5f1;
+      --code-comment: #6b9e94;
+      --code-key: #5eead4;
+      --code-str: #fcd34d;
+      --font: 'DM Sans', system-ui, sans-serif;
+      --mono: 'IBM Plex Mono', ui-monospace, monospace;
+      --shadow: 0 4px 24px rgba(15, 61, 54, 0.06);
+      --radius: 18px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font);
+      color: var(--ink);
+      min-height: 100vh;
+      background:
+        radial-gradient(ellipse 80% 50% at 10% -10%, rgba(94, 234, 212, 0.35), transparent 55%),
+        radial-gradient(ellipse 60% 40% at 100% 0%, rgba(15, 118, 110, 0.12), transparent 50%),
+        linear-gradient(180deg, var(--bg-0) 0%, var(--bg-1) 100%);
+      padding: 1.75rem 1.25rem 3rem;
+    }
+
+    .container { max-width: 1080px; margin: 0 auto; }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+      margin-bottom: 1.75rem;
+      padding: 1.1rem 1.4rem;
+      background: rgba(255,255,255,0.85);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+
+    .brand { display: flex; align-items: center; gap: 0.9rem; }
+    .brand-mark {
+      width: 46px; height: 46px;
+      border-radius: 14px;
+      background: linear-gradient(145deg, var(--teal) 0%, var(--teal-deep) 100%);
+      color: #fff;
+      font-weight: 800;
+      font-size: 0.85rem;
+      display: grid; place-items: center;
+      box-shadow: 0 8px 20px rgba(15, 118, 110, 0.28);
+    }
+    .brand h1 { font-size: 1.25rem; font-weight: 800; letter-spacing: -0.03em; }
+    .brand p { font-size: 0.82rem; color: var(--muted); margin-top: 0.15rem; }
+
+    .nav { display: flex; gap: 0.55rem; flex-wrap: wrap; }
+    .nav a {
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 0.84rem;
+      padding: 0.5rem 1rem;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: #fff;
+      color: var(--ink);
+      transition: 0.15s ease;
+    }
+    .nav a:hover { border-color: var(--teal); color: var(--teal); }
+    .nav a.primary {
+      background: var(--teal);
+      border-color: var(--teal);
+      color: #fff;
+    }
+    .nav a.primary:hover { background: var(--teal-deep); }
+
+    .hero {
+      position: relative;
+      overflow: hidden;
+      border-radius: 22px;
+      padding: 2rem 2rem 1.75rem;
+      margin-bottom: 1.5rem;
+      background: linear-gradient(135deg, #0f3d38 0%, #0f766e 55%, #14b8a6 100%);
+      color: #ecfdf5;
+      box-shadow: 0 16px 40px rgba(15, 61, 54, 0.22);
+    }
+    .hero::after {
+      content: '';
+      position: absolute;
+      right: -40px; top: -40px;
+      width: 220px; height: 220px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.08);
+    }
+    .hero-badge {
+      display: inline-block;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 0.3rem 0.7rem;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.14);
+      border: 1px solid rgba(255,255,255,0.2);
+      margin-bottom: 0.85rem;
+    }
+    .hero h2 {
+      font-size: clamp(1.4rem, 3vw, 1.85rem);
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      max-width: 28ch;
+      margin-bottom: 0.65rem;
+      position: relative;
+      z-index: 1;
+    }
+    .hero p {
+      font-size: 0.98rem;
+      line-height: 1.55;
+      opacity: 0.92;
+      max-width: 56ch;
+      position: relative;
+      z-index: 1;
+    }
+
+    .notice {
+      display: flex;
+      gap: 0.75rem;
+      align-items: flex-start;
+      background: var(--amber-bg);
+      border: 1px solid var(--amber-border);
+      color: var(--amber);
+      border-radius: 14px;
+      padding: 0.95rem 1.1rem;
+      font-size: 0.88rem;
+      font-weight: 500;
+      margin-bottom: 1.5rem;
+      line-height: 1.45;
+    }
+    .notice strong { font-weight: 700; }
+
+    .section {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 1.4rem 1.5rem;
+      margin-bottom: 1.35rem;
+    }
+    .section-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 1rem;
+      flex-wrap: wrap;
+      margin-bottom: 1rem;
+    }
+    .section-head h3 {
+      font-size: 1.15rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+    }
+    .section-head .desc {
+      color: var(--muted);
+      font-size: 0.88rem;
+      margin-top: 0.3rem;
+      max-width: 60ch;
+      line-height: 1.45;
+    }
+
+    .btn-copy {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      border: none;
+      cursor: pointer;
+      font-family: var(--font);
+      font-weight: 700;
+      font-size: 0.82rem;
+      padding: 0.5rem 0.95rem;
+      border-radius: 10px;
+      background: var(--teal);
+      color: #fff;
+      transition: 0.15s ease;
+      white-space: nowrap;
+    }
+    .btn-copy:hover { background: var(--teal-deep); }
+    .btn-copy.copied { background: #15803d; }
+
+    .code-shell {
+      position: relative;
+      border-radius: 14px;
+      overflow: hidden;
+      background: var(--code-bg);
+      border: 1px solid #1a3330;
+    }
+    .code-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.55rem 0.9rem;
+      background: rgba(255,255,255,0.04);
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      color: var(--code-comment);
+      font-size: 0.75rem;
+      font-family: var(--mono);
+    }
+    .code-shell pre {
+      margin: 0;
+      padding: 1.1rem 1.15rem 1.25rem;
+      overflow-x: auto;
+      font-family: var(--mono);
+      font-size: 0.78rem;
+      line-height: 1.55;
+      color: var(--code-fg);
+      tab-size: 2;
+    }
+    .code-shell .cmt { color: var(--code-comment); }
+    .code-shell .key { color: var(--code-key); }
+    .code-shell .str { color: var(--code-str); }
+
+    .explain-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 0.85rem;
+      margin-top: 1.15rem;
+    }
+    .explain-card {
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 1rem 1.05rem;
+      background: linear-gradient(180deg, #f7fbfa 0%, #fff 100%);
+      transition: transform 0.15s ease, border-color 0.15s ease;
+    }
+    .explain-card:hover {
+      transform: translateY(-2px);
+      border-color: var(--border-strong);
+    }
+    .explain-card .tag {
+      display: inline-block;
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: var(--teal-deep);
+      background: var(--teal-soft);
+      padding: 0.2rem 0.5rem;
+      border-radius: 6px;
+      margin-bottom: 0.5rem;
+    }
+    .explain-card h4 {
+      font-size: 0.95rem;
+      font-weight: 700;
+      margin-bottom: 0.35rem;
+    }
+    .explain-card p {
+      font-size: 0.84rem;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    .folder-tree {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+      margin-bottom: 1.1rem;
+    }
+    .folder-row {
+      display: flex;
+      align-items: center;
+      gap: 0.55rem;
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      padding: 0.45rem 0.7rem;
+      border-radius: 10px;
+      background: #f4faf8;
+      border: 1px solid transparent;
+      color: var(--muted);
+    }
+    .folder-row.dir { font-weight: 600; color: var(--ink); background: var(--teal-soft); border-color: #99f6e4; }
+    .folder-row .indent { width: 1.1rem; }
+
+    .tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+      margin-bottom: 0.9rem;
+    }
+    .tab {
+      border: 1px solid var(--border);
+      background: #fff;
+      color: var(--muted);
+      font-family: var(--font);
+      font-weight: 650;
+      font-size: 0.8rem;
+      padding: 0.45rem 0.85rem;
+      border-radius: 999px;
+      cursor: pointer;
+      transition: 0.15s ease;
+    }
+    .tab:hover { color: var(--teal); border-color: var(--teal-mid); }
+    .tab.active {
+      background: var(--teal);
+      border-color: var(--teal);
+      color: #fff;
+    }
+
+    .file-meta {
+      font-size: 0.84rem;
+      color: var(--muted);
+      line-height: 1.5;
+      margin-bottom: 0.85rem;
+      padding: 0.75rem 0.95rem;
+      border-radius: 12px;
+      background: #f4faf8;
+      border: 1px solid var(--border);
+    }
+    .file-meta strong { color: var(--ink); }
+
+    .env-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.86rem;
+      margin-top: 0.5rem;
+    }
+    .env-table th, .env-table td {
+      text-align: left;
+      padding: 0.7rem 0.85rem;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+    .env-table th {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+      background: #f4faf8;
+    }
+    .env-table code {
+      font-family: var(--mono);
+      font-size: 0.78rem;
+      background: var(--teal-soft);
+      color: var(--teal-deep);
+      padding: 0.15rem 0.4rem;
+      border-radius: 5px;
+    }
+
+    @media (max-width: 640px) {
+      .hero { padding: 1.4rem; }
+      .section { padding: 1.1rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="brand">
+        <div class="brand-mark">PG</div>
+        <div>
+          <h1>Compose &amp; Postgres Setup</h1>
+          <p>Copy-ready structure — credentials stay in your <code>.env</code></p>
+        </div>
+      </div>
+      <nav class="nav">
+        <a href="/">Dashboard</a>
+        <a href="/docs.html">Docs</a>
+        <a href="#compose" class="primary">Compose</a>
+      </nav>
+    </header>
+
+    <section class="hero">
+      <div class="hero-badge">Production layout</div>
+      <h2>Docker Compose + postgres/ configs for PITR</h2>
+      <p>
+        Use this template to run PostgreSQL 18 with pgBackRest archiving.
+        Secrets are never shown here — only <strong>${ENV_VARS}</strong> placeholders you define locally.
+      </p>
+    </section>
+
+    <div class="notice">
+      <span aria-hidden="true">⚠</span>
+      <div>
+        <strong>No secrets in the UI.</strong>
+        Passwords, access keys, and real credentials are not displayed.
+        Put them in a local <code>.env</code> file (never commit it) and reference them as
+        <code>${POSTGRES_PASSWORD}</code>, etc.
+      </div>
+    </div>
+
+    <!-- COMPOSE -->
+    <section class="section" id="compose">
+      <div class="section-head">
+        <div>
+          <h3>docker-compose.yml</h3>
+          <p class="desc">
+            Example structure matching the Hostinger / production stack.
+            Copy it, then set variables in <code>.env</code>.
+          </p>
+        </div>
+        <button class="btn-copy" type="button" data-copy="composeSource">Copy compose</button>
+      </div>
+
+      <div class="code-shell">
+        <div class="code-bar">
+          <span>docker-compose.yml</span>
+          <span>secrets → .env only</span>
+        </div>
+        <pre id="composeSource"><span class="key">version</span>: <span class="str">"3.9"</span>
+
+<span class="key">services</span>:
+  <span class="key">db</span>:
+    <span class="key">build</span>: ./postgres
+    <span class="key">image</span>: postgres:18
+    <span class="key">container_name</span>: postgres_db_18
+    <span class="key">restart</span>: always
+    <span class="key">shm_size</span>: 8g
+    <span class="key">environment</span>:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      TZ: Asia/Kolkata
+      PGDATA: /var/lib/postgresql/18/docker
+    <span class="key">ports</span>:
+      - "${PG_PORT:-5432}:5432"
+    <span class="key">volumes</span>:
+      - ${PGDATA_HOST_PATH:-./postgres_data}:/var/lib/postgresql/18/docker
+      - ./postgres/postgresql.conf:/etc/postgresql/postgresql.conf
+      - ./postgres/pg_hba.conf:/etc/postgresql/pg_hba.conf
+      - ./postgres/pgbackrest.conf:/etc/pgbackrest/pgbackrest.conf
+      - ./backups:/backups
+    <span class="key">command</span>:
+      [
+        "postgres",
+        "-c",
+        "config_file=/etc/postgresql/postgresql.conf",
+        "-c",
+        "hba_file=/etc/postgresql/pg_hba.conf"
+      ]</pre>
+      </div>
+
+      <div class="explain-grid">
+        <article class="explain-card">
+          <div class="tag">build / image</div>
+          <h4>Custom Postgres image</h4>
+          <p><code>./postgres</code> Dockerfile installs pgBackRest on top of <code>postgres:18</code> so archive-push works inside the container.</p>
+        </article>
+        <article class="explain-card">
+          <div class="tag">environment</div>
+          <h4>Credentials from .env</h4>
+          <p><code>POSTGRES_USER</code>, <code>POSTGRES_PASSWORD</code>, and <code>POSTGRES_DB</code> are injected at runtime. Never hardcode passwords in the compose file.</p>
+        </article>
+        <article class="explain-card">
+          <div class="tag">shm_size: 8g</div>
+          <h4>Shared memory</h4>
+          <p>Postgres uses shared memory heavily. Raising <code>shm_size</code> avoids shared-memory errors on larger workloads.</p>
+        </article>
+        <article class="explain-card">
+          <div class="tag">volumes</div>
+          <h4>Data, configs, backups</h4>
+          <p>PGDATA persists on the host. Config files mount read/write from <code>postgres/</code>. <code>./backups</code> is the local pgBackRest repo.</p>
+        </article>
+        <article class="explain-card">
+          <div class="tag">command</div>
+          <h4>Custom config paths</h4>
+          <p>Forces Postgres to load your mounted <code>postgresql.conf</code> and <code>pg_hba.conf</code> instead of image defaults.</p>
+        </article>
+        <article class="explain-card">
+          <div class="tag">ports</div>
+          <h4>Host mapping</h4>
+          <p><code>${PG_PORT:-5432}</code> maps host → container 5432. Change the host port without editing the image.</p>
+        </article>
+      </div>
+    </section>
+
+    <!-- ENV -->
+    <section class="section" id="env">
+      <div class="section-head">
+        <div>
+          <h3>.env template (no real secrets)</h3>
+          <p class="desc">Create <code>production_ready/.env</code> from this shape. Fill values locally — do not paste production passwords into the UI or git.</p>
+        </div>
+        <button class="btn-copy" type="button" data-copy="envSource">Copy .env template</button>
+      </div>
+      <div class="code-shell">
+        <div class="code-bar"><span>.env.example</span><span>placeholders only</span></div>
+        <pre id="envSource"><span class="cmt"># Database (fill locally — never commit real passwords)</span>
+POSTGRES_USER=your_db_user
+POSTGRES_PASSWORD=your_strong_password
+POSTGRES_DB=your_database
+PG_PORT=5432
+PGDATA_HOST_PATH=./postgres_data
+
+<span class="cmt"># Dashboard / scripts</span>
+PG_CONTAINER_NAME=postgres_db_18
+PG_USER=your_db_user
+PG_DB=your_database
+STANZA_NAME=db
+LOGICAL_PORT=7100</pre>
+      </div>
+
+      <table class="env-table">
+        <thead>
+          <tr>
+            <th>Variable</th>
+            <th>Purpose</th>
+            <th>Shown in UI?</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>POSTGRES_PASSWORD</code></td>
+            <td>Database password for the superuser</td>
+            <td>No — placeholder only</td>
+          </tr>
+          <tr>
+            <td><code>POSTGRES_USER</code> / <code>POSTGRES_DB</code></td>
+            <td>Bootstrap role and database name</td>
+            <td>Names as placeholders only</td>
+          </tr>
+          <tr>
+            <td><code>PGDATA_HOST_PATH</code></td>
+            <td>Host directory for PGDATA bind mount</td>
+            <td>Generic path, not a secret</td>
+          </tr>
+          <tr>
+            <td><code>S3_*</code> / webhooks</td>
+            <td>Optional cloud / alert credentials</td>
+            <td>Never rendered in this page</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- POSTGRES FOLDER -->
+    <section class="section" id="postgres-folder">
+      <div class="section-head">
+        <div>
+          <h3>postgres/ folder</h3>
+          <p class="desc">Configs mounted into the container. Browse each file below to understand how PITR archiving is wired.</p>
+        </div>
+        <button class="btn-copy" type="button" data-copy="activeFileSource" id="copyFileBtn">Copy file</button>
+      </div>
+
+      <div class="folder-tree" aria-hidden="true">
+        <div class="folder-row dir">postgres/</div>
+        <div class="folder-row"><span class="indent"></span>Dockerfile</div>
+        <div class="folder-row"><span class="indent"></span>postgresql.conf</div>
+        <div class="folder-row"><span class="indent"></span>pg_hba.conf</div>
+        <div class="folder-row"><span class="indent"></span>pgbackrest.conf</div>
+        <div class="folder-row"><span class="indent"></span>init.sql</div>
+      </div>
+
+      <div class="tabs" role="tablist">
+        <button class="tab active" type="button" data-file="dockerfile">Dockerfile</button>
+        <button class="tab" type="button" data-file="postgresql">postgresql.conf</button>
+        <button class="tab" type="button" data-file="pghba">pg_hba.conf</button>
+        <button class="tab" type="button" data-file="pgbackrest">pgbackrest.conf</button>
+      </div>
+
+      <div class="file-meta" id="fileMeta"></div>
+
+      <div class="code-shell">
+        <div class="code-bar">
+          <span id="fileNameLabel">Dockerfile</span>
+          <span>reference copy</span>
+        </div>
+        <pre id="activeFileSource"></pre>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const FILES = {
+      dockerfile: {
+        name: 'Dockerfile',
+        meta: '<strong>Dockerfile</strong> — Starts from official Postgres 18 and installs <code>pgbackrest</code> so <code>archive_command</code> can push WAL from inside the container.',
+        content: `FROM postgres:18
+
+# Install pgBackRest backup agent in the image
+RUN apt-get update && \\
+    apt-get install -y pgbackrest && \\
+    rm -rf /var/lib/apt/lists/*`
+      },
+      postgresql: {
+        name: 'postgresql.conf',
+        meta: '<strong>postgresql.conf</strong> — PITR-ready WAL settings. <code>wal_level=replica</code> is enough for archiving (logical slots are not used). <code>max_slot_wal_keep_size</code> caps disk risk if a slot appears later.',
+        content: `# Production PostgreSQL — PITR + WAL Archiving
+# Logical decoding is NOT required for point-in-time recovery.
+
+listen_addresses = '*'
+max_connections = 200
+
+shared_buffers = 512MB
+work_mem = 16MB
+maintenance_work_mem = 128MB
+
+wal_level = replica
+track_commit_timestamp = on
+fsync = on
+synchronous_commit = on
+max_wal_size = 4GB
+min_wal_size = 512MB
+checkpoint_timeout = 15min
+checkpoint_completion_target = 0.9
+
+max_replication_slots = 10
+max_wal_senders = 10
+max_slot_wal_keep_size = 2GB
+
+archive_mode = on
+archive_command = 'pgbackrest --stanza=db archive-push %p'
+archive_timeout = 300
+
+log_destination = 'stderr'
+logging_collector = on
+log_directory = 'log'
+log_filename = 'postgresql-%Y-%m-%d_%H%M%S.log'
+log_statement = 'all'
+log_line_prefix = '%m [%p] %q%u@%d '`
+      },
+      pghba: {
+        name: 'pg_hba.conf',
+        meta: '<strong>pg_hba.conf</strong> — Client authentication rules. Local trust for container ops; remote connections require MD5. Harden further for public networks.',
+        content: `# TYPE  DATABASE        USER            ADDRESS                 METHOD
+local   all             all                                     trust
+host    all             all             127.0.0.1/32            trust
+host    all             all             0.0.0.0/0               md5
+host    replication     all             0.0.0.0/0               md5
+host    all             all             ::1/128                 trust`
+      },
+      pgbackrest: {
+        name: 'pgbackrest.conf',
+        meta: '<strong>pgbackrest.conf</strong> — Stanza + repo settings. User/database names are placeholders — set them to match your <code>.env</code>. No passwords are stored in this file for local repo mode.',
+        content: `[db]
+pg1-path=/var/lib/postgresql/18/docker
+pg1-user=YOUR_DB_USER
+pg1-database=YOUR_DATABASE
+
+[global]
+repo1-path=/backups
+repo1-retention-full=2
+log-level-console=info
+log-level-file=detail
+start-fast=y
+compress-type=zst`
+      }
+    };
+
+    let activeKey = 'dockerfile';
+
+    function showFile(key) {
+      activeKey = key;
+      const file = FILES[key];
+      document.getElementById('activeFileSource').textContent = file.content;
+      document.getElementById('fileNameLabel').textContent = file.name;
+      document.getElementById('fileMeta').innerHTML = file.meta;
+      document.querySelectorAll('.tab').forEach((btn) => {
+        btn.classList.toggle('active', btn.dataset.file === key);
+      });
+    }
+
+    document.querySelectorAll('.tab').forEach((btn) => {
+      btn.addEventListener('click', () => showFile(btn.dataset.file));
+    });
+
+    document.querySelectorAll('.btn-copy').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const id = btn.getAttribute('data-copy');
+        const el = document.getElementById(id);
+        const text = el ? el.textContent : '';
+        try {
+          await navigator.clipboard.writeText(text);
+          const prev = btn.textContent;
+          btn.textContent = 'Copied!';
+          btn.classList.add('copied');
+          setTimeout(() => {
+            btn.textContent = prev;
+            btn.classList.remove('copied');
+          }, 1600);
+        } catch {
+          alert('Could not copy — select the code block manually.');
+        }
+      });
+    });
+
+    showFile('dockerfile');
+  </script>
+</body>
+</html>

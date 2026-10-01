@@ -344,16 +344,19 @@
         <div class="brand-icon">DB</div>
         <div class="title-group">
           <h1>System Documentation Portal</h1>
-          <div class="sub">PostgreSQL Real-Time Streaming & Physical Point-in-Time Recovery</div>
+          <div class="sub">PostgreSQL WAL Archiving &amp; Physical Point-in-Time Recovery</div>
         </div>
       </div>
-    <a href="/" class="nav-link">live-stream</a>
+    <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+      <a href="/" class="nav-link">Dashboard</a>
+      <a href="/setup.html" class="nav-link">Compose &amp; Setup</a>
+    </div>
     </header>
 
     <!-- Animated Hero Banner -->
     <div class="hero-banner">
-      <h2>Enterprise Disaster Recovery & Live Replication Engine</h2>
-      <p>High-availability PostgreSQL 18 solution combining block-level delta backups via <strong>pgBackRest</strong> and sub-second transaction tracking using native <strong>Logical Decoding</strong> (<code>test_decoding</code>).</p>
+      <h2>Enterprise Disaster Recovery with pgBackRest</h2>
+      <p>High-availability PostgreSQL 18 solution using block-level delta backups via <strong>pgBackRest</strong>, WAL archiving for PITR, and a dashboard that monitors archive health — <strong>without logical replication slots</strong>.</p>
     </div>
 
     <!-- Data Flow Diagram -->
@@ -363,22 +366,22 @@
         <div class="flow-step">
           <div class="flow-step-num">1</div>
           <div class="flow-step-title">PostgreSQL Engine</div>
-          <div class="flow-step-desc">Executes SQL transactions & writes binary WAL log segments.</div>
+          <div class="flow-step-desc">Executes SQL transactions &amp; writes binary WAL log segments.</div>
         </div>
         <div class="flow-step">
           <div class="flow-step-num">2</div>
           <div class="flow-step-title">pgBackRest Engine</div>
-          <div class="flow-step-desc">Pushes compressed 16MB WAL segment files to repository storage.</div>
+          <div class="flow-step-desc">Pushes compressed WAL segments and base backups to the repository.</div>
         </div>
         <div class="flow-step">
           <div class="flow-step-num">3</div>
-          <div class="flow-step-title">Logical Streamer API</div>
-          <div class="flow-step-desc">Decodes binary WAL bytes into clean JSON write feeds.</div>
+          <div class="flow-step-title">PITR Monitor API</div>
+          <div class="flow-step-desc">Reports current LSN, archive status, WAL size, and backup inventory.</div>
         </div>
         <div class="flow-step">
           <div class="flow-step-num">4</div>
           <div class="flow-step-title">Web Dashboard UI</div>
-          <div class="flow-step-desc">Renders live transaction cards & triggers point-in-time recovery.</div>
+          <div class="flow-step-desc">Shows WAL/archive health and triggers restore by timestamp or LSN.</div>
         </div>
       </div>
     </div>
@@ -396,16 +399,15 @@
 pgbackrest --stanza=db --delta restore</div>
       </div>
 
-      <!-- Card 2: Why Logical Decoding -->
+      <!-- Card 2: WAL monitoring (no logical slots) -->
       <div class="doc-card">
         <div>
-          <span class="badge-tag green">REAL-TIME STREAMING</span>
-          <h3>Why Logical Decoding (`test_decoding`)?</h3>
-          <p>Traditional WAL inspection via <code>pg_waldump</code> requires heavy text parsing and disk reading. <code>test_decoding</code> is built directly into core PostgreSQL, decoding binary WAL streams into JSON events instantly with zero disk read penalty.</p>
+          <span class="badge-tag green">WAL MONITORING</span>
+          <h3>Why no logical replication slot?</h3>
+          <p>PITR only needs physical WAL archives. Idle logical slots retain WAL forever and can fill the disk. The dashboard reads <code>pg_current_wal_lsn()</code>, <code>pg_stat_archiver</code>, and <code>pgbackrest info</code> instead.</p>
         </div>
-        <div class="code-box">SELECT * FROM pg_logical_slot_peek_changes(
-  'pitr_logical_slot', NULL, 500
-);</div>
+        <div class="code-box">SELECT pg_current_wal_lsn();
+SELECT * FROM pg_stat_archiver;</div>
       </div>
 
       <!-- Card 3: Automated Cron Schedule -->
@@ -466,18 +468,18 @@ pgbackrest --stanza=db --delta restore</div>
         <tbody>
           <tr>
             <td><code>GET</code></td>
-            <td><code>/api/wal/logical?page=1&amp;limit=15&amp;start_date=...</code></td>
-            <td>Fetch paginated, date-filtered decoded JSON WAL transaction events.</td>
+            <td><code>/api/status</code></td>
+            <td>WAL size, current LSN, archive stats, replication slot warning, and pgBackRest backup summary.</td>
+          </tr>
+          <tr>
+            <td><code>GET</code></td>
+            <td><code>/metrics</code></td>
+            <td>Prometheus text metrics (DB online, backup count, last backup timestamp).</td>
           </tr>
           <tr>
             <td><code>POST</code></td>
             <td><code>/api/restore</code></td>
-            <td>Trigger In-Place (<code>"inplace"</code>) or Promoted Cluster (<code>"cluster"</code>) recovery to target LSN.</td>
-          </tr>
-          <tr>
-            <td><code>POST</code></td>
-            <td><code>/api/logical/init</code></td>
-            <td>Initialize logical replication slot <code>pitr_logical_slot</code>.</td>
+            <td>Trigger In-Place (<code>"inplace"</code>) or Promoted Cluster (<code>"cluster"</code>) recovery to target timestamp or LSN.</td>
           </tr>
         </tbody>
       </table>
