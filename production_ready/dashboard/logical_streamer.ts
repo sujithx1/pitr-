@@ -39,6 +39,102 @@ const PG_CONTAINER = process.env.PG_CONTAINER_NAME || 'postgres_pitr_prod';
 const PG_USER = process.env.PG_USER || process.env.POSTGRES_USER || 'dev';
 const PG_DB = process.env.PG_DB || process.env.POSTGRES_DB || 'mds';
 const STANZA_NAME = process.env.STANZA_NAME || 'db';
+const RESTORE_OTP_PHONE = (process.env.RESTORE_OTP_PHONE || '').trim();
+const OTP_SERVICE_NAME = (process.env.OTP_SERVICE_NAME || '').trim();
+const APP_ENV = (process.env.APP_ENV || process.env.NODE_ENV || 'local').trim().toLowerCase();
+const IS_PRODUCTION = APP_ENV === 'production' || APP_ENV === 'prod';
+const OTP_TTL_MS = 5 * 60 * 1000;
+
+// Dashboard generates OTP; OTP service delivers SMS in production only.
+let pendingRestoreOtp: { code: string; expiresAt: number } | null = null;
+
+function otpServiceBaseUrl(): string {
+  if (!OTP_SERVICE_NAME) return '';
+  if (/^https?:\/\//i.test(OTP_SERVICE_NAME)) return OTP_SERVICE_NAME.replace(/\/$/, '');
+  return `http://${OTP_SERVICE_NAME}`.replace(/\/$/, '');
+}
+
+function generateOtp(): string {
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
+
+function maskPhone(phone: string): string {
+  return phone.replace(/(\d{2})\d+(\d{2})/, '$1******$2');
+}
+
+function verifyLocalOtp(otpCode: string): { ok: true } | { ok: false; error: string } {
+  if (!pendingRestoreOtp) {
+    return { ok: false, error: 'No OTP pending. Send OTP first.' };
+  }
+  if (Date.now() > pendingRestoreOtp.expiresAt) {
+    pendingRestoreOtp = null;
+    return { ok: false, error: 'OTP expired. Send a new one.' };
+  }
+  if (otpCode !== pendingRestoreOtp.code) {
+    return { ok: false, error: 'Invalid OTP' };
+  }
+  pendingRestoreOtp = null;
+  return { ok: true };
+}
+
+/** Deliver phone+otp to external SMS/OTP service (we generate the code). */
+async function deliverOtpToService(phone: string, otp: string): Promise<{ ok: boolean; error?: string }> {
+  const base = otpServiceBaseUrl();
+  if (!base) {
+    return { ok: false, error: 'OTP_SERVICE_NAME is not configured in .env' };
+  }
+  if (!phone) {
+    return { ok: false, error: 'RESTORE_OTP_PHONE is not configured in .env' };
+  }
+  try {
+    const res = await fetch(`${base}/send`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone, otp }),
+    });
+    let data: any = null;
+    try {
+      data = await res.json();
+    } catch {
+      data = null;
+    }
+    if (!res.ok) {
+      return { ok: false, error: (data && (data.error || data.message)) || `OTP service HTTP ${res.status}` };
+    }
+    if (data && (data.success === false || data.ok === false)) {
+      return { ok: false, error: data.error || data.message || 'OTP service rejected send' };
+    }
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, error: `OTP service unreachable (${base}): ${err.message || String(err)}` };
+  }
+}
+function sanitizeCloneSuffix(suffix: string): { ok: true; value: string } | { ok: false; error: string } {
+  const value = (suffix || '').trim();
+  if (!value) return { ok: true, value: '' };
+  if (!/^[a-zA-Z0-9_-]+$/.test(value)) {
+    return { ok: false, error: 'nameSuffix must contain only letters, numbers, underscore, or hyphen' };
+  }
+  return { ok: true, value };
+}
+
+function resolveCloneNames(suffix: string): { container: string; volume: string } {
+  if (suffix) {
+    return { container: `pitr_backup_${suffix}`, volume: `pitr_backup_${suffix}_pgdata` };
+  }
+  return { container: 'pitr_backup', volume: 'pitr_backup_pgdata' };
+}
+
+function parseClonePort(portRaw: unknown): { ok: true; port: number } | { ok: false; error: string } {
+  if (portRaw === undefined || portRaw === null || String(portRaw).trim() === '') {
+    return { ok: true, port: 5434 };
+  }
+  const port = parseInt(String(portRaw).trim(), 10);
+  if (!Number.isInteger(port) || port < 1024 || port > 65535) {
+    return { ok: false, error: 'port must be an integer between 1024 and 65535' };
+  }
+  return { ok: true, port };
+}
 
 async function runSql(sql: string): Promise<string> {
   try {
@@ -185,15 +281,57 @@ app.get('/metrics', (c) => {
   return c.text(body, 200, { 'Content-Type': 'text/plain; version=0.0.4; charset=utf-8' });
 });
 
-// Trigger Point-in-Time Recovery
+// Generate OTP here; call OTP SMS service only when APP_ENV=production
+app.post('/api/restore/otp/send', async (c) => {
+  if (IS_PRODUCTION && !RESTORE_OTP_PHONE) {
+    return c.json({ success: false, error: 'RESTORE_OTP_PHONE is not configured in .env' }, 400);
+  }
+  const code = generateOtp();
+  pendingRestoreOtp = { code, expiresAt: Date.now() + OTP_TTL_MS };
+
+  if (IS_PRODUCTION) {
+    const delivered = await deliverOtpToService(RESTORE_OTP_PHONE, code);
+    if (!delivered.ok) {
+      pendingRestoreOtp = null;
+      return c.json({ success: false, error: delivered.error }, 400);
+    }
+    return c.json({
+      success: true,
+      phoneMasked: maskPhone(RESTORE_OTP_PHONE),
+      expiresInSec: OTP_TTL_MS / 1000,
+    });
+  }
+
+  // Local / non-production: skip OTP service; return code for testing
+  console.log(`[OTP local] code=${code} phone=${RESTORE_OTP_PHONE || '(none)'}`);
+  return c.json({
+    success: true,
+    phoneMasked: RESTORE_OTP_PHONE ? maskPhone(RESTORE_OTP_PHONE) : 'local',
+    expiresInSec: OTP_TTL_MS / 1000,
+    otp: code,
+    localMode: true,
+  });
+});
+
+// Trigger Point-in-Time Recovery (OTP required; verified locally)
 app.post('/api/restore', async (c) => {
   try {
-    const { timestamp, lsn, restoreMode } = await c.req.json();
+    const { timestamp, lsn, restoreMode, otp, port, nameSuffix } = await c.req.json();
     // Prefer explicit LSN when provided; otherwise use timestamp
     const target = (lsn && String(lsn).trim()) || timestamp;
 
     if (!target) {
       return c.json({ error: 'No target LSN or timestamp provided' }, 400);
+    }
+
+    const otpCode = otp != null ? String(otp).trim() : '';
+    if (!otpCode) {
+      return c.json({ success: false, error: 'OTP is required before restore' }, 400);
+    }
+
+    const verified = verifyLocalOtp(otpCode);
+    if (!verified.ok) {
+      return c.json({ success: false, error: verified.error }, 403);
     }
 
     const scriptsDir = execSync('pwd', { encoding: 'utf-8' }).trim().replace(/\/dashboard$/, '/scripts');
@@ -204,13 +342,30 @@ app.post('/api/restore', async (c) => {
       const output = execSync(`bash "${scriptPath}" "${target}"`, { cwd: scriptsDir, encoding: 'utf-8' });
       console.log(`[RESTORE OUTPUT]:\n${output}`);
       return c.json({ success: true, mode: 'inplace', log: output });
-    } else {
-      const scriptPath = `${scriptsDir}/restore_cluster_clone.sh`;
-      console.log(`[RECOVERY 2/2] Executing Physical Cluster Promotion: bash ${scriptPath} "${target}"`);
-      const output = execSync(`bash "${scriptPath}" "${target}"`, { cwd: scriptsDir, encoding: 'utf-8' });
-      console.log(`[RESTORE OUTPUT]:\n${output}`);
-      return c.json({ success: true, mode: 'cluster', log: output });
     }
+
+    const portResult = parseClonePort(port);
+    if (!portResult.ok) {
+      return c.json({ success: false, error: portResult.error }, 400);
+    }
+    const suffixResult = sanitizeCloneSuffix(nameSuffix != null ? String(nameSuffix) : '');
+    if (!suffixResult.ok) {
+      return c.json({ success: false, error: suffixResult.error }, 400);
+    }
+    const names = resolveCloneNames(suffixResult.value);
+    const scriptPath = `${scriptsDir}/restore_cluster_clone.sh`;
+    const cmd = `bash "${scriptPath}" "${target}" "${portResult.port}" "${suffixResult.value}"`;
+    console.log(`[RECOVERY 2/2] Executing Physical Cluster Promotion: ${cmd}`);
+    const output = execSync(cmd, { cwd: scriptsDir, encoding: 'utf-8' });
+    console.log(`[RESTORE OUTPUT]:\n${output}`);
+    return c.json({
+      success: true,
+      mode: 'cluster',
+      container: names.container,
+      volume: names.volume,
+      port: portResult.port,
+      log: output,
+    });
   } catch (err: any) {
     const logOutput = err.stdout || err.stderr || err.output?.join?.('\n') || err.message;
     console.error(`[RESTORE LOG/ERROR]:\n${logOutput}`);

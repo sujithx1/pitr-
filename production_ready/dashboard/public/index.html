@@ -453,16 +453,16 @@
       <h3 style="margin-bottom: 0.5rem; font-size: 1.25rem; font-weight: 800;">Point-in-Time Recovery</h3>
       <p id="targetDisplay" style="font-family: var(--font-code); color: var(--primary); margin-bottom: 1.3rem; font-weight: 600;"></p>
 
-      <div style="display: flex; flex-direction: column; gap: 0.8rem; margin-bottom: 1.5rem;">
+      <div style="display: flex; flex-direction: column; gap: 0.8rem; margin-bottom: 1.1rem;">
         <label class="radio-card">
-          <input type="radio" name="restoreMode" id="modeCluster" value="cluster" checked style="margin-top: 0.2rem;">
+          <input type="radio" name="restoreMode" id="modeCluster" value="cluster" checked style="margin-top: 0.2rem;" onchange="syncCloneFields()">
           <div>
-            <strong style="font-size: 0.92rem;">Promoted Cluster Clone (Port 5434)</strong>
+            <strong style="font-size: 0.92rem;">Promoted Cluster Clone (custom port)</strong>
             <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.15rem;">Standalone clone — zero downtime on primary.</div>
           </div>
         </label>
         <label class="radio-card">
-          <input type="radio" name="restoreMode" id="modeInplace" value="inplace" style="margin-top: 0.2rem;">
+          <input type="radio" name="restoreMode" id="modeInplace" value="inplace" style="margin-top: 0.2rem;" onchange="syncCloneFields()">
           <div>
             <strong style="font-size: 0.92rem;">In-Place Restore</strong>
             <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.15rem;">Overwrites the production database (downtime).</div>
@@ -470,9 +470,32 @@
         </label>
       </div>
 
-      <div style="display: flex; gap: 0.8rem; justify-content: flex-end;">
+      <div id="cloneOptions" style="display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1.1rem;">
+        <div class="form-row" style="margin-bottom: 0;">
+          <div class="field">
+            <label for="clonePort">Port</label>
+            <input type="number" id="clonePort" min="1024" max="65535" placeholder="5434" autocomplete="off">
+          </div>
+          <div class="field">
+            <label for="cloneSuffix">Name suffix (optional)</label>
+            <input type="text" id="cloneSuffix" placeholder="e.g. client1" autocomplete="off" oninput="updateClonePreview()">
+          </div>
+        </div>
+        <div style="font-size: 0.8rem; color: var(--text-muted); font-family: var(--font-code);" id="clonePreview">Container: pitr_backup</div>
+      </div>
+
+      <div id="otpSection" style="display: none; margin-bottom: 1.1rem;">
+        <div class="field">
+          <label for="restoreOtp">OTP sent to security phone</label>
+          <input type="text" id="restoreOtp" inputmode="numeric" autocomplete="one-time-code" placeholder="Enter OTP">
+        </div>
+        <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.45rem;" id="otpHint"></div>
+      </div>
+
+      <div style="display: flex; gap: 0.8rem; justify-content: flex-end; flex-wrap: wrap;">
         <button class="btn-secondary" onclick="closeRestoreModal()">Cancel</button>
-        <button class="btn-primary" id="confirmRestoreBtn" onclick="triggerRestore()">Confirm Restore</button>
+        <button class="btn-secondary" id="sendOtpBtn" onclick="sendRestoreOtp()">Send OTP</button>
+        <button class="btn-primary" id="confirmRestoreBtn" onclick="triggerRestore()" disabled>Verify &amp; Restore</button>
       </div>
     </div>
   </div>
@@ -481,6 +504,18 @@
     let latestStatus = null;
     let pendingTarget = null;
     let pendingKind = null;
+    let otpSent = false;
+
+    function updateClonePreview() {
+      const suffix = (document.getElementById('cloneSuffix').value || '').trim();
+      const name = suffix ? ('pitr_backup_' + suffix) : 'pitr_backup';
+      document.getElementById('clonePreview').textContent = 'Container: ' + name;
+    }
+
+    function syncCloneFields() {
+      const mode = document.querySelector('input[name="restoreMode"]:checked').value;
+      document.getElementById('cloneOptions').style.display = mode === 'cluster' ? 'flex' : 'none';
+    }
 
     async function fetchStatus() {
       try {
@@ -559,8 +594,17 @@
         alert('Enter a target timestamp or LSN.');
         return;
       }
+      otpSent = false;
+      document.getElementById('restoreOtp').value = '';
+      document.getElementById('otpSection').style.display = 'none';
+      document.getElementById('otpHint').textContent = '';
+      document.getElementById('confirmRestoreBtn').disabled = true;
+      document.getElementById('sendOtpBtn').disabled = false;
+      document.getElementById('sendOtpBtn').textContent = 'Send OTP';
       document.getElementById('targetDisplay').textContent =
         (pendingKind === 'lsn' ? 'Target LSN: ' : 'Target time: ') + pendingTarget;
+      syncCloneFields();
+      updateClonePreview();
       document.getElementById('restoreModal').style.display = 'flex';
     }
 
@@ -568,11 +612,68 @@
       document.getElementById('restoreModal').style.display = 'none';
     }
 
+    async function sendRestoreOtp() {
+      const btn = document.getElementById('sendOtpBtn');
+      btn.disabled = true;
+      btn.textContent = 'Sending…';
+      try {
+        const res = await fetch('/api/restore/otp/send', { method: 'POST' });
+        const data = await res.json();
+        if (!data.success) {
+          alert(data.error || 'Failed to send OTP');
+          btn.disabled = false;
+          btn.textContent = 'Send OTP';
+          return;
+        }
+        otpSent = true;
+        document.getElementById('otpSection').style.display = 'block';
+        if (data.localMode && data.otp) {
+          document.getElementById('restoreOtp').value = data.otp;
+          document.getElementById('otpHint').textContent =
+            'Local mode: OTP service skipped. Code: ' + data.otp;
+        } else {
+          document.getElementById('otpHint').textContent =
+            'OTP sent to ' + (data.phoneMasked || 'configured security phone') + '. Enter it to unlock restore.';
+        }
+        document.getElementById('confirmRestoreBtn').disabled = false;
+        btn.textContent = 'Resend OTP';
+        btn.disabled = false;
+        document.getElementById('restoreOtp').focus();
+      } catch (e) {
+        alert('Connection error while sending OTP.');
+        btn.disabled = false;
+        btn.textContent = 'Send OTP';
+      }
+    }
+
     async function triggerRestore() {
+      if (!otpSent) {
+        alert('Send and enter the OTP first.');
+        return;
+      }
+      const otp = document.getElementById('restoreOtp').value.trim();
+      if (!otp) {
+        alert('Enter the OTP from the security phone.');
+        return;
+      }
+
       const restoreMode = document.querySelector('input[name="restoreMode"]:checked').value;
-      const body = { restoreMode };
+      const body = { restoreMode, otp };
       if (pendingKind === 'lsn') body.lsn = pendingTarget;
       else body.timestamp = pendingTarget;
+
+      if (restoreMode === 'cluster') {
+        const portVal = document.getElementById('clonePort').value.trim();
+        const suffix = document.getElementById('cloneSuffix').value.trim();
+        if (portVal) body.port = parseInt(portVal, 10);
+        if (suffix) {
+          if (!/^[a-zA-Z0-9_-]+$/.test(suffix)) {
+            alert('Name suffix may only contain letters, numbers, underscore, or hyphen.');
+            return;
+          }
+          body.nameSuffix = suffix;
+        }
+      }
 
       const btn = document.getElementById('confirmRestoreBtn');
       btn.disabled = true;
@@ -585,7 +686,14 @@
         });
         const data = await res.json();
         if (data.success) {
-          alert('Restore completed (' + (data.mode || restoreMode) + ').\n\n' + (data.log || ''));
+          let msg = 'Restore completed (' + (data.mode || restoreMode) + ').';
+          if (data.mode === 'cluster' || restoreMode === 'cluster') {
+            msg += '\n\nConnect: localhost:' + (data.port || 5434);
+            if (data.container) msg += '\nContainer: ' + data.container;
+            if (data.volume) msg += '\nVolume: ' + data.volume;
+          }
+          if (data.log) msg += '\n\n' + data.log;
+          alert(msg);
           closeRestoreModal();
         } else {
           alert('Restore failed.\n\n' + (data.log || data.error || 'Unknown error'));
@@ -594,7 +702,7 @@
         alert('Connection error during restore.');
       } finally {
         btn.disabled = false;
-        btn.textContent = 'Confirm Restore';
+        btn.textContent = 'Verify & Restore';
       }
     }
 

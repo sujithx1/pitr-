@@ -1,6 +1,7 @@
 #!/bin/bash
 # ==============================================================================
 # Enterprise High-Speed Physical Cluster Promotion Recovery Pipeline
+# Usage: ./restore_cluster_clone.sh <LSN|Timestamp> [port] [suffix]
 # ==============================================================================
 
 set -e
@@ -16,8 +17,28 @@ fi
 TARGET_LSN=$1
 if [ -z "$TARGET_LSN" ]; then
     echo "ERROR: Target LSN or Timestamp is required."
-    echo "Usage: ./restore_cluster_clone.sh <LSN|Timestamp>"
+    echo "Usage: ./restore_cluster_clone.sh <LSN|Timestamp> [port] [suffix]"
     exit 1
+fi
+
+PROMOTED_PORT="${2:-5434}"
+SUFFIX="${3:-}"
+
+if ! [[ "$PROMOTED_PORT" =~ ^[0-9]+$ ]] || [ "$PROMOTED_PORT" -lt 1024 ] || [ "$PROMOTED_PORT" -gt 65535 ]; then
+    echo "ERROR: Port must be an integer between 1024 and 65535 (got: ${PROMOTED_PORT})."
+    exit 1
+fi
+
+if [ -n "$SUFFIX" ]; then
+    if ! [[ "$SUFFIX" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+        echo "ERROR: Name suffix must contain only [a-zA-Z0-9_-] (got: ${SUFFIX})."
+        exit 1
+    fi
+    PROMOTED_CONTAINER="pitr_backup_${SUFFIX}"
+    PROMOTED_VOLUME="pitr_backup_${SUFFIX}_pgdata"
+else
+    PROMOTED_CONTAINER="pitr_backup"
+    PROMOTED_VOLUME="pitr_backup_pgdata"
 fi
 
 CONTAINER_NAME=${PG_CONTAINER_NAME:-"postgres_pitr_prod"}
@@ -27,9 +48,6 @@ if [ -z "$IMAGE_NAME" ]; then
 fi
 
 STANZA_NAME=${STANZA_NAME:-"db"}
-PROMOTED_CONTAINER="postgres_pitr_cluster_promoted"
-PROMOTED_VOLUME="pitr_promoted_pgdata"
-PROMOTED_PORT="5434"
 PGDATA_PATH="/var/lib/postgresql/18/docker"
 DB_TZ="${TZ:-Asia/Kolkata}"
 DB_TZ_OFFSET="+05:30"
@@ -50,14 +68,28 @@ echo "=================================================="
 echo "Starting Physical Cluster Promotion Recovery"
 echo "Target LSN/Time:    $TARGET_LSN"
 echo "Promoted Container: $PROMOTED_CONTAINER"
+echo "Promoted Volume:    $PROMOTED_VOLUME"
 echo "Promoted Port:      $PROMOTED_PORT"
 echo "=================================================="
+
+# Fail early if another running container already publishes this host port
+PORT_OWNER=$(docker ps --format '{{.Names}} {{.Ports}}' 2>/dev/null | awk -v port=":${PROMOTED_PORT}->" '
+  index($0, port) {
+    print $1
+    exit
+  }
+')
+if [ -n "$PORT_OWNER" ] && [ "$PORT_OWNER" != "$PROMOTED_CONTAINER" ]; then
+    echo "ERROR: Host port ${PROMOTED_PORT} is already published by running container '${PORT_OWNER}'."
+    echo "Choose a different port or stop that container first."
+    exit 1
+fi
 
 # 0. Flush active WAL segment into backup repository
 echo "[0/4] Flushing active WAL segment..."
 docker exec -u postgres "$CONTAINER_NAME" psql -U "${POSTGRES_USER:-dev}" -d "${POSTGRES_DB:-mds}" -c "SELECT pg_switch_wal();" &>/dev/null || true
 
-# 1. Clean old promoted volume & container
+# 1. Clean old promoted volume & container (same name only)
 echo "[1/4] Preparing physical recovery volume..."
 docker stop "$PROMOTED_CONTAINER" 2>/dev/null || true
 docker rm "$PROMOTED_CONTAINER" 2>/dev/null || true
@@ -76,7 +108,7 @@ docker run --rm \
     "$IMAGE_NAME" \
     pgbackrest --stanza="$STANZA_NAME" $TYPE_FLAG --target="$TARGET_LSN" --target-action=promote restore
 
-# 3. Boot promoted cluster container on port 5434
+# 3. Boot promoted cluster container
 # Must set PGDATA to the same path pgBackRest restored (not image default .../data).
 echo "[3/4] Launching promoted database on port $PROMOTED_PORT..."
 docker run -d \
@@ -122,6 +154,8 @@ done
 
 echo "=================================================="
 echo "Cluster Promotion Completed Successfully!"
+echo "Container: $PROMOTED_CONTAINER"
+echo "Volume:    $PROMOTED_VOLUME"
 echo "New Instance Online at: localhost:$PROMOTED_PORT"
-echo "When finished testing, run: ./scripts/cleanup_promoted.sh"
+echo "When finished testing, run: ./scripts/cleanup_promoted.sh ${PROMOTED_CONTAINER} ${PROMOTED_VOLUME}"
 echo "=================================================="

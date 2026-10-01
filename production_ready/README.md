@@ -56,8 +56,10 @@ bun dev
 
 - **Open**: `http://localhost:4001` (or `LOGICAL_PORT` from `.env`; default in code is `7100`)
 - **Features**: DB/WAL/archive/backup status, restore by **timestamp** or **LSN** (cluster clone or in-place)
+- **Cluster clone**: optional custom **port** (default `5434`) and **name suffix** (`pitr_backup` / `pitr_backup_<suffix>`)
+- **Restore OTP gate**: dashboard generates OTP; when `APP_ENV=production` it POSTs `{ phone, otp }` to `OTP_SERVICE_NAME` `/send` (local skips the service and returns the code)
 - **Setup page**: `/setup.html` — copyable docker-compose (no secrets), explanations, and `postgres/` config browser
-- **APIs**: `GET /api/status`, `GET /metrics`, `POST /api/restore`
+- **APIs**: `GET /api/status`, `GET /metrics`, `POST /api/restore/otp/send`, `POST /api/restore`
 - **No logical replication slots** — the dashboard does not create or peek slots (avoids unbounded `pg_wal` growth)
 
 ### 2. Deploy / upgrade ops (one-time if an old slot exists)
@@ -88,5 +90,7 @@ docker exec -it postgres_pitr_prod psql -U dev -d mds -c \
 ### 5. Physical Cluster Promotion Recovery
 
 ```bash
-./production_ready/scripts/restore_cluster_clone.sh <LSN_OR_TIMESTAMP>
+./production_ready/scripts/restore_cluster_clone.sh <LSN_OR_TIMESTAMP> [port] [suffix]
+# defaults: port 5434, container/volume pitr_backup / pitr_backup_pgdata
+# cleanup:  ./production_ready/scripts/cleanup_promoted.sh [container] [volume]
 ```

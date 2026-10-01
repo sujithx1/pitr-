@@ -438,10 +438,10 @@ SELECT * FROM pg_stat_archiver;</div>
         <tbody>
           <tr>
             <td><strong>Promoted Cluster Clone</strong></td>
-            <td><code>5434</code></td>
+            <td><code>custom</code> (default <code>5434</code>)</td>
             <td>🟢 <strong>Zero Downtime</strong></td>
-            <td>Boots an independent database clone on Port 5434 without interrupting the live production app on Port 5433. Perfect for audit testing and historical queries.</td>
-            <td><code>./scripts/restore_cluster_clone.sh &lt;LSN&gt;</code></td>
+            <td>Boots an independent clone with optional custom host port and name suffix (<code>pitr_backup</code> / <code>pitr_backup_&lt;suffix&gt;</code>). Does not interrupt the live primary.</td>
+            <td><code>./scripts/restore_cluster_clone.sh &lt;LSN&gt; [port] [suffix]</code></td>
           </tr>
           <tr>
             <td><strong>In-Place Recovery</strong></td>
@@ -478,8 +478,13 @@ SELECT * FROM pg_stat_archiver;</div>
           </tr>
           <tr>
             <td><code>POST</code></td>
+            <td><code>/api/restore/otp/send</code></td>
+            <td>Dashboard generates a 6-digit OTP. In production (<code>APP_ENV=production</code>) POSTs <code>{ phone, otp }</code> to <code>OTP_SERVICE_NAME</code> <code>/send</code>; local mode skips the service and returns the code.</td>
+          </tr>
+          <tr>
+            <td><code>POST</code></td>
             <td><code>/api/restore</code></td>
-            <td>Trigger In-Place (<code>"inplace"</code>) or Promoted Cluster (<code>"cluster"</code>) recovery to target timestamp or LSN.</td>
+            <td>Requires matching OTP (verified locally, 5 min TTL). Triggers In-Place (<code>"inplace"</code>) or Promoted Cluster (<code>"cluster"</code>) recovery. Cluster mode accepts optional <code>port</code> and <code>nameSuffix</code>.</td>
           </tr>
         </tbody>
       </table>
